@@ -1,0 +1,84 @@
+.container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.svg {
+  transform: rotate(-90deg);
+  filter: drop-shadow(0 0 8px rgba(0, 230, 118, 0.15));
+}
+
+.track {
+  opacity: 0.3;
+}
+
+.progress {
+  transition: stroke 0.5s ease;
+}
+
+.dot {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.center {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.dotIndicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-bottom: var(--space-2);
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.value {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-primary);
+  line-height: 1;
+  margin: var(--space-1) 0;
+}
+
+.unit {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.subLabel {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(0, 230, 118, 0.3);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(0, 230, 118, 0.6);
+    opacity: 0.8;
+  }
+}

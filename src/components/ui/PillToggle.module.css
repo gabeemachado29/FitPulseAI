@@ -1,0 +1,73 @@
+.container {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.fullWidth .pill {
+  flex: 1;
+}
+
+/* ── Size variants ── */
+.sm .pill {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.md .pill {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-base);
+}
+
+.lg .pill {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--font-size-md);
+}
+
+/* ── Pill Button ── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-full);
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pill:hover {
+  background-color: var(--bg-card);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.active {
+  background-color: var(--accent-green);
+  border-color: var(--accent-green);
+  color: var(--bg-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.active:hover {
+  background-color: var(--accent-green-hover);
+  border-color: var(--accent-green-hover);
+  color: var(--bg-primary);
+}
+
+.pillIcon {
+  display: flex;
+  align-items: center;
+  font-size: 1.1em;
+}
