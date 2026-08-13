@@ -1,1 +1,41 @@
-/* ProfilePage styles — will be fully implemented in Phase 4 */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.noticeBanner {
+  background-color: var(--accent-green-light);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  color: var(--accent-green);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.logoutBtn {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-primary);
+  color: var(--accent-green);
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.footer {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-4);
+}

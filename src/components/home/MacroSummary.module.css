@@ -1,0 +1,52 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.statCard {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+}
+
+.iconYellow {
+  color: #FFD600;
+  margin-bottom: 2px;
+}
+
+.iconBlue {
+  color: #29B6F6;
+  margin-bottom: 2px;
+}
+
+.iconGreen {
+  color: var(--accent-green);
+  margin-bottom: 2px;
+}
+
+.value {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.unit {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.label {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+  margin-top: 2px;
+}

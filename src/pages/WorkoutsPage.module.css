@@ -1,1 +1,72 @@
-/* WorkoutsPage styles — will be fully implemented in Phase 4 */
+.burnedCard {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.burnedIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background-color: rgba(255, 109, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.burnedInfo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.burnedValue {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-primary);
+}
+
+.burnedText {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.dayWrap {
+  margin-bottom: var(--space-5);
+  width: 100%;
+}
+
+.workoutList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.stravaSection {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.noticeBanner {
+  background-color: var(--accent-green-light);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  color: var(--accent-green);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-4);
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.loaderWrap {
+  padding: var(--space-12) 0;
+}

@@ -1,0 +1,70 @@
+.container {
+  background: var(--bg-rest-timer);
+  border: 1px solid var(--accent-teal);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-glow-teal);
+  animation: scaleIn 0.3s ease forwards;
+}
+
+.tag {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 2px;
+  color: var(--accent-green);
+  text-transform: uppercase;
+}
+
+.timerDisplay {
+  font-size: 4.5rem;
+  font-weight: var(--font-weight-extrabold);
+  color: #26C6DA;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 20px rgba(38, 198, 218, 0.4);
+}
+
+.completionText {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.checkIcon {
+  color: var(--accent-green);
+}
+
+.nextText {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  margin: 0;
+
+  strong {
+    color: var(--accent-green);
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.actionBtn {
+  min-width: 100px;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+}
