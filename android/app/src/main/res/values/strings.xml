@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FitPulseAI</string>
+    <string name="title_activity_main">FitPulseAI</string>
+    <string name="package_name">com.fitpulseai.app</string>
+    <string name="custom_url_scheme">com.fitpulseai.app</string>
+</resources>

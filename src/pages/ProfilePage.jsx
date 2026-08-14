@@ -10,6 +10,7 @@ import Button from '../components/ui/Button';
 import Loader from '../components/ui/Loader';
 import { useAuth } from '../hooks/useAuth';
 import { useProfile } from '../hooks/useProfile';
+import { useToastStore } from '../store/toastStore';
 import {
   calculateBMI,
   calculateBMR,
@@ -38,7 +39,7 @@ export default function ProfilePage() {
   });
 
   const [saving, setSaving] = useState(false);
-  const [saveNotice, setSaveNotice] = useState('');
+  const addToast = useToastStore((state) => state.addToast);
 
   // Sync profile data when loaded from Firestore
   useEffect(() => {
@@ -78,8 +79,7 @@ export default function ProfilePage() {
       carbsGoal: calculatedMacros.carbs,
       fatGoal: calculatedMacros.fat,
     }));
-    setSaveNotice('Recomendações aplicadas com sucesso!');
-    setTimeout(() => setSaveNotice(''), 3000);
+    addToast('Recomendações aplicadas com sucesso!', 'success');
   };
 
   const handleCalculateMacrosOnly = () => {
@@ -95,10 +95,10 @@ export default function ProfilePage() {
     setSaving(true);
     try {
       await updateProfile(formData);
-      setSaveNotice('✓ Perfil salvo com sucesso!');
-      setTimeout(() => setSaveNotice(''), 3000);
+      addToast('Perfil salvo com sucesso!', 'success');
     } catch (err) {
       console.error('Error saving profile:', err);
+      addToast('Erro ao salvar perfil.', 'error');
     } finally {
       setSaving(false);
     }
@@ -141,9 +141,7 @@ export default function ProfilePage() {
         {/* User Card */}
         <UserInfo user={user} />
 
-        {saveNotice && (
-          <div className={styles.noticeBanner}>{saveNotice}</div>
-        )}
+
 
         {/* Body Measurements */}
         <BodyMeasurements data={formData} onChange={handleChangeField} />

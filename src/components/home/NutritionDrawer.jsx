@@ -1,6 +1,7 @@
 import Modal from '../ui/Modal';
 import ProgressBar from '../ui/ProgressBar';
 import WeeklyChart from './WeeklyChart';
+import MealsList from './MealsList';
 import styles from './NutritionDrawer.module.css';
 
 export default function NutritionDrawer({
@@ -9,6 +10,8 @@ export default function NutritionDrawer({
   dailyLog,
   weeklyLogs = [],
   profile,
+  onEditMeal,
+  onRemoveMeal,
 }) {
   const proteinGoal = profile?.proteinGoal || 230;
   const carbsGoal = profile?.carbsGoal || 251;
@@ -98,10 +101,17 @@ export default function NutritionDrawer({
           </p>
         </div>
 
-        {/* Section 2: Evolução Semanal */}
+        {/* Section 2: Refeições Registradas */}
+        <MealsList
+          meals={dailyLog?.meals || []}
+          onEditMeal={onEditMeal}
+          onRemoveMeal={onRemoveMeal}
+        />
+
+        {/* Section 3: Evolução Semanal */}
         <WeeklyChart weeklyLogs={weeklyLogs} calorieGoal={calorieGoal} />
 
-        {/* Section 3: 4 Stats Cards */}
+        {/* Section 4: 4 Stats Cards */}
         <div className={styles.statsGrid}>
           <div className={styles.statCard}>
             <span className={styles.statNumber}>{avgConsumed}</span>

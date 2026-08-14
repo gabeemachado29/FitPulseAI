@@ -15,6 +15,7 @@ import ProfilePage from './pages/ProfilePage';
 /* ── Components ── */
 import BottomNav from './components/ui/BottomNav';
 import Loader from './components/ui/Loader';
+import ToastContainer from './components/ui/ToastContainer';
 
 function ProtectedRoute({ children }) {
   const user = useAuthStore((state) => state.user);
@@ -78,7 +79,9 @@ export default function App() {
   }, [setUser, setLoading]);
 
   return (
-    <Routes>
+    <>
+      <ToastContainer />
+      <Routes>
       {/* Public routes */}
       <Route
         path="/login"
@@ -152,5 +155,6 @@ export default function App() {
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

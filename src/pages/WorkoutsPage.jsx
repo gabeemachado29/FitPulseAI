@@ -6,6 +6,7 @@ import WorkoutCard from '../components/workouts/WorkoutCard';
 import WorkoutForm from '../components/workouts/WorkoutForm';
 import WorkoutPreview from '../components/workouts/WorkoutPreview';
 import ActiveWorkout from '../components/workouts/ActiveWorkout';
+import StravaActivityModal from '../components/workouts/StravaActivityModal';
 import Button from '../components/ui/Button';
 import Loader from '../components/ui/Loader';
 import { useWorkouts } from '../hooks/useWorkouts';
@@ -17,6 +18,8 @@ import {
   fetchStravaActivities,
   disconnectStrava,
 } from '../services/stravaService';
+import { addMultipleBurnedEntries, fetchBurnedLog } from '../services/burnedService';
+import { useToastStore } from '../store/toastStore';
 import styles from './WorkoutsPage.module.css';
 
 const DAYS_ORDER = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
@@ -40,7 +43,11 @@ export default function WorkoutsPage() {
   // Strava integration states
   const [stravaConnected, setStravaConnected] = useState(false);
   const [stravaLoading, setStravaLoading] = useState(false);
-  const [stravaNotice, setStravaNotice] = useState('');
+  const [stravaModalOpen, setStravaModalOpen] = useState(false);
+  const [stravaActivities, setStravaActivities] = useState([]);
+  const [todayBurned, setTodayBurned] = useState(0);
+  const [todayExercises, setTodayExercises] = useState(0);
+  const addToast = useToastStore((state) => state.addToast);
 
   const {
     workouts,
@@ -71,7 +78,7 @@ export default function WorkoutsPage() {
         try {
           await exchangeStravaCode(user.uid, code);
           setStravaConnected(true);
-          setStravaNotice('✓ Strava conectado com sucesso!');
+          addToast('Strava conectado com sucesso!', 'success');
           searchParams.delete('code');
           searchParams.delete('scope');
           searchParams.delete('state');
@@ -89,6 +96,15 @@ export default function WorkoutsPage() {
 
     checkStrava();
   }, [user, searchParams, setSearchParams]);
+
+  // Load today's burned calories
+  useEffect(() => {
+    if (!user?.uid) return;
+    fetchBurnedLog(user.uid, new Date()).then((log) => {
+      setTodayBurned(log.totalBurned || 0);
+      setTodayExercises(log.entries?.length || 0);
+    });
+  }, [user?.uid]);
 
   const filteredWorkouts = workouts.filter(
     (w) => (w.dayOfWeek || 'qua').toLowerCase() === selectedDay
@@ -127,14 +143,42 @@ export default function WorkoutsPage() {
     try {
       const activities = await fetchStravaActivities(user.uid);
       if (activities.length > 0) {
-        setStravaNotice(
-          `✓ Puxadas ${activities.length} atividades do Strava!`
-        );
+        setStravaActivities(activities);
+        setStravaModalOpen(true);
+      } else {
+        addToast('Nenhuma atividade recente encontrada.', 'info');
       }
     } catch (err) {
       console.error('Error fetching Strava activities:', err);
+      addToast('Erro ao buscar atividades do Strava.', 'error');
     } finally {
       setStravaLoading(false);
+    }
+  };
+
+  const handleApplyStravaActivities = async (selectedActivities) => {
+    setStravaModalOpen(false);
+    try {
+      const entries = selectedActivities.map((a) => ({
+        source: 'strava',
+        calories: a.calories,
+        name: a.name,
+        activityId: a.id,
+        type: a.type,
+      }));
+      const updatedLog = await addMultipleBurnedEntries(user.uid, new Date(), entries);
+      setTodayBurned(updatedLog.totalBurned);
+      setTodayExercises(updatedLog.entries.length);
+
+      const totalCals = selectedActivities.reduce((sum, a) => sum + a.calories, 0);
+      addToast(
+        `+${totalCals} kcal queimadas adicionadas ao seu dia!`,
+        'success',
+        4000
+      );
+    } catch (err) {
+      console.error('Error applying Strava activities:', err);
+      addToast('Erro ao aplicar atividades.', 'error');
     }
   };
 
@@ -143,7 +187,7 @@ export default function WorkoutsPage() {
     try {
       await disconnectStrava(user.uid);
       setStravaConnected(false);
-      setStravaNotice('Strava desconectado.');
+      addToast('Strava desconectado.', 'info');
     } catch (err) {
       console.error('Error disconnecting Strava:', err);
     } finally {
@@ -191,9 +235,9 @@ export default function WorkoutsPage() {
           <Flame size={20} color="var(--accent-orange)" />
         </div>
         <div className={styles.burnedInfo}>
-          <span className={styles.burnedValue}>0</span>
+          <span className={styles.burnedValue}>{todayBurned}</span>
           <span className={styles.burnedText}>
-            kcal gastas hoje · 0 exercícios
+            kcal gastas hoje · {todayExercises} {todayExercises === 1 ? 'exercício' : 'exercícios'}
           </span>
         </div>
       </div>
@@ -206,9 +250,7 @@ export default function WorkoutsPage() {
         />
       </div>
 
-      {stravaNotice && (
-        <div className={styles.noticeBanner}>{stravaNotice}</div>
-      )}
+
 
       {loading ? (
         <div className={styles.loaderWrap}>
@@ -286,6 +328,15 @@ export default function WorkoutsPage() {
           </div>
         </div>
       )}
+
+      {/* Strava Activity Selector Modal */}
+      <StravaActivityModal
+        isOpen={stravaModalOpen}
+        activities={stravaActivities}
+        loading={stravaLoading}
+        onApply={handleApplyStravaActivities}
+        onClose={() => setStravaModalOpen(false)}
+      />
     </div>
   );
 }

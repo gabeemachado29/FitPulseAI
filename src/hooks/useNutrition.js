@@ -5,6 +5,7 @@ import {
   fetchDailyNutritionLog,
   addMealToDailyLog,
   removeMealFromDailyLog,
+  updateMealInDailyLog,
   fetchWeeklyNutritionLogs,
   getFormattedDateKey,
 } from '../services/nutritionService';
@@ -62,6 +63,20 @@ export function useNutrition(selectedDate = new Date()) {
     }
   };
 
+  const updateMeal = async (mealId, updatedData) => {
+    if (!user) return;
+    try {
+      const updated = await updateMealInDailyLog(user.uid, dateKey, mealId, updatedData);
+      setDailyLog(updated);
+      const updatedWeekly = await fetchWeeklyNutritionLogs(user.uid);
+      setWeeklyLogs(updatedWeekly);
+      return updated;
+    } catch (err) {
+      console.error('Failed to update meal:', err);
+      throw err;
+    }
+  };
+
   const removeMeal = async (mealId) => {
     if (!user) return;
     try {
@@ -82,6 +97,7 @@ export function useNutrition(selectedDate = new Date()) {
     loading,
     error,
     addMeal,
+    updateMeal,
     removeMeal,
   };
 }

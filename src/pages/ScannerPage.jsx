@@ -7,6 +7,7 @@ import TextScanner from '../components/scanner/TextScanner';
 import ScanResult from '../components/scanner/ScanResult';
 import Loader from '../components/ui/Loader';
 import { useNutrition } from '../hooks/useNutrition';
+import { useToastStore } from '../store/toastStore';
 import { analyzeTextMeal, analyzePhotoMeal } from '../services/aiScannerService';
 import styles from './ScannerPage.module.css';
 
@@ -19,16 +20,17 @@ export default function ScannerPage() {
   const navigate = useNavigate();
   const { addMeal } = useNutrition();
 
+  const addToast = useToastStore((state) => state.addToast);
+
   const [activeTab, setActiveTab] = useState('foto');
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
-  const [successMessage, setSuccessMessage] = useState('');
 
   const handleAnalyzeText = async (description) => {
     setAnalyzing(true);
     setResult(null);
-    setSuccessMessage('');
+
     try {
       const data = await analyzeTextMeal(description);
       setResult(data);
@@ -42,7 +44,6 @@ export default function ScannerPage() {
   const handleAnalyzePhoto = async (base64Data, mimeType) => {
     setAnalyzing(true);
     setResult(null);
-    setSuccessMessage('');
     try {
       const data = await analyzePhotoMeal(base64Data, mimeType);
       setResult(data);
@@ -65,12 +66,13 @@ export default function ScannerPage() {
         source: activeTab,
         timestamp: new Date().toISOString(),
       });
-      setSuccessMessage('✓ Refeição salva com sucesso na sua nutrição diária!');
+      addToast('Refeição salva com sucesso!', 'success');
       setTimeout(() => {
         navigate('/');
       }, 1200);
     } catch (err) {
       console.error('Error saving meal:', err);
+      addToast('Erro ao salvar refeição.', 'error');
     } finally {
       setSaving(false);
     }
@@ -92,16 +94,13 @@ export default function ScannerPage() {
           onChange={(tab) => {
             setActiveTab(tab);
             setResult(null);
-            setSuccessMessage('');
           }}
           fullWidth
           size="lg"
         />
       </div>
 
-      {successMessage && (
-        <div className={styles.successBanner}>{successMessage}</div>
-      )}
+
 
       {analyzing ? (
         <div className={styles.analyzingWrap}>

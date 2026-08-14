@@ -78,6 +78,33 @@ export async function removeMealFromDailyLog(uid, dateKey, mealId) {
   return updatedLog;
 }
 
+export async function updateMealInDailyLog(uid, dateKey, mealId, updatedMeal) {
+  if (!uid || !dateKey || !mealId) throw new Error('User ID, Date, and Meal ID are required');
+  const docRef = doc(db, 'users', uid, 'nutritionLogs', dateKey);
+  const currentLog = await fetchDailyNutritionLog(uid, dateKey);
+
+  const newMeals = (currentLog.meals || []).map((m) =>
+    m.id === mealId ? { ...m, ...updatedMeal } : m
+  );
+  const totalCalories = newMeals.reduce((sum, m) => sum + (m.calories || 0), 0);
+  const totalProtein = newMeals.reduce((sum, m) => sum + (m.protein || 0), 0);
+  const totalCarbs = newMeals.reduce((sum, m) => sum + (m.carbs || 0), 0);
+  const totalFat = newMeals.reduce((sum, m) => sum + (m.fat || 0), 0);
+
+  const updatedLog = {
+    date: dateKey,
+    meals: newMeals,
+    totalCalories,
+    totalProtein,
+    totalCarbs,
+    totalFat,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await setDoc(docRef, updatedLog, { merge: true });
+  return updatedLog;
+}
+
 export async function fetchWeeklyNutritionLogs(uid) {
   if (!uid) return [];
   const days = [];
