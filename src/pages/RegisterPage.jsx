@@ -1,7 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+} from 'firebase/auth';
 import { auth, googleProvider } from '../config/firebase';
+import { Capacitor } from '@capacitor/core';
 import { UserPlus, Mail, Lock } from 'lucide-react';
 import styles from './RegisterPage.module.css';
 
@@ -12,6 +18,19 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Handle Google Login redirect result on mobile/Capacitor
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          navigate('/');
+        }
+      })
+      .catch((err) => {
+        console.error('Error handling redirect register:', err);
+      });
+  }, [navigate]);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -52,11 +71,27 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      await signInWithPopup(auth, googleProvider);
-      navigate('/');
+      if (Capacitor.isNativePlatform()) {
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        try {
+          await signInWithPopup(auth, googleProvider);
+          navigate('/');
+        } catch (popupErr) {
+          if (
+            popupErr.code === 'auth/popup-blocked' ||
+            popupErr.code === 'auth/operation-not-supported-in-this-environment' ||
+            popupErr.code === 'auth/internal-error'
+          ) {
+            await signInWithRedirect(auth, googleProvider);
+          } else {
+            throw popupErr;
+          }
+        }
+      }
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {
-        setError('Erro ao entrar com Google. Tente novamente.');
+        setError('Erro ao entrar com Google. Tente cadastrar com e-mail e senha.');
       }
     } finally {
       setLoading(false);
