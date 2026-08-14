@@ -1,12 +1,23 @@
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { Capacitor } from '@capacitor/core';
 
 const STRAVA_AUTH_URL = 'https://www.strava.com/oauth/authorize';
 const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
 
 export function getStravaAuthUrl(uid) {
   const clientId = import.meta.env.VITE_STRAVA_CLIENT_ID;
-  const redirectUri = import.meta.env.VITE_STRAVA_REDIRECT_URI || `${window.location.origin}/strava/callback`;
+  let redirectUri = import.meta.env.VITE_STRAVA_REDIRECT_URI;
+
+  if (!redirectUri) {
+    if (Capacitor.isNativePlatform()) {
+      // On mobile APK, fallback to production server URL instead of localhost
+      redirectUri = 'https://fitpulseai-41d93.web.app/strava/callback';
+    } else {
+      redirectUri = `${window.location.origin}/strava/callback`;
+    }
+  }
+
   const scope = 'read,activity:read_all';
 
   if (!clientId) {
