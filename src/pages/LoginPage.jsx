@@ -3,11 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithCredential,
+  GoogleAuthProvider,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../config/firebase';
 import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LogIn, Mail, Lock } from 'lucide-react';
 import styles from './LoginPage.module.css';
 
@@ -18,18 +19,16 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Handle Google Login redirect result on mobile/Capacitor
+  // Initialize native GoogleAuth on mobile
   useEffect(() => {
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          navigate('/');
-        }
-      })
-      .catch((err) => {
-        console.error('Error handling redirect login:', err);
-      });
-  }, [navigate]);
+    if (Capacitor.isNativePlatform()) {
+      try {
+        GoogleAuth.initialize();
+      } catch (e) {
+        console.warn('GoogleAuth init:', e);
+      }
+    }
+  }, []);
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
@@ -58,26 +57,18 @@ export default function LoginPage() {
 
     try {
       if (Capacitor.isNativePlatform()) {
-        await signInWithRedirect(auth, googleProvider);
+        const googleUser = await GoogleAuth.signIn();
+        const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+        await signInWithCredential(auth, credential);
+        navigate('/');
       } else {
-        try {
-          await signInWithPopup(auth, googleProvider);
-          navigate('/');
-        } catch (popupErr) {
-          if (
-            popupErr.code === 'auth/popup-blocked' ||
-            popupErr.code === 'auth/operation-not-supported-in-this-environment' ||
-            popupErr.code === 'auth/internal-error'
-          ) {
-            await signInWithRedirect(auth, googleProvider);
-          } else {
-            throw popupErr;
-          }
-        }
+        await signInWithPopup(auth, googleProvider);
+        navigate('/');
       }
     } catch (err) {
+      console.error('Google login error:', err);
       if (err.code !== 'auth/popup-closed-by-user') {
-        setError('Erro ao entrar com Google. Tente usar e-mail e senha.');
+        setError('Erro ao entrar com Google. Tente entrar com e-mail e senha.');
       }
     } finally {
       setLoading(false);
