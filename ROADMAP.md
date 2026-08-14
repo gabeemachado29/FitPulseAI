@@ -6,13 +6,17 @@ Este documento contém o status completo das funcionalidades do **FitPulseAI**, 
 
 ## ✅ 1. Funcionalidades Implementadas
 
-- [x] **🔐 Autenticação**: Login & Registro com Email/Senha e Google Auth via Firebase.
+- [x] **🔐 Autenticação Nativa Mobile & Web**: 
+  - Login & Registro com Email/Senha e Google Auth.
+  - **Adaptação Nativa Mobile**: Integração com `@codetrix-studio/capacitor-google-auth` no Android (abre a folha nativa do sistema Android sem dependência de browser ou `localhost`).
 - [x] **📊 Dashboard & Ring de Calorias**: Meta calórica, consumido, gasto (treinos + Strava) e valor líquido.
 - [x] **🥗 Scanner de Refeições com IA (Gemini 2.5/Flash)**: Leitura via foto da refeição ou texto natural.
 - [x] **📋 Lista de Refeições de Hoje**: Exibição detalhada no Dashboard e Drawer com opção de **Editar** (nome/macros) e **Excluir**.
 - [x] **💧 Water Tracker (Rastreador de Hidratação)**: Anel de progresso, botões rápidos (+150ml, +250ml, +500ml, +1L), histórico de registros do dia e alerta de meta.
 - [x] **🔔 Sistema de Toasts (Notificações Globais)**: Feedback visual interativo para todas as ações do usuário (Salvar perfil, registrar comida, conectar Strava, editar/excluir refeição).
-- [x] **🚴 Integrador Strava & Seletor de Atividades**: Conexão OAuth com Strava, modal interativo com seleção múltipla de atividades e soma automática de calorias gastas no dia.
+- [x] **🚴 Integrador Strava & Seletor de Atividades (Mobile & Web)**:
+  - Conexão OAuth adaptada para mobile: redireciona para a URL do servidor de produção (`https://fitpulseai-41d93.web.app/strava/callback`), evitando erros de `localhost` no APK.
+  - Modal interativo com seleção múltipla de atividades e soma automática de calorias gastas no dia.
 - [x] **🏋️ Módulo de Treinos**: CRUD de treinos por dia da semana, busca de exercícios com database local, cronômetro de treino ativo e timer de descanso interativo.
 - [x] **👤 Perfil & Cálculo de Saúde**: IMC, TDEE, BMR (Taxa Metabólica Basal), meta de água sugerida e distribuição recomendada de macros.
 
@@ -65,7 +69,7 @@ O **Capacitor** (desenvolvido pela equipe do Ionic) transforma seu app Web (Vite
 ### Passo 1: Instalar o Capacitor no Projeto
 Na pasta do `FitPulseAI`, execute:
 ```powershell
-npm install @capacitor/core @capacitor/cli @capacitor/android
+npm install @capacitor/core @capacitor/cli @capacitor/android @codetrix-studio/capacitor-google-auth
 ```
 
 ### Passo 2: Inicializar o Capacitor
@@ -76,13 +80,29 @@ npx cap init FitPulseAI com.fitpulseai.app
 - **App Package ID**: `com.fitpulseai.app` (ou o ID da sua empresa/domínio)
 
 ### Passo 3: Configurar o `capacitor.config.json`
-Certifique-se de que a pasta web apontada seja `dist`:
+Certifique-se de que a pasta web apontada seja `dist` e os plugins estejam configurados:
 ```json
 {
   "appId": "com.fitpulseai.app",
   "appName": "FitPulseAI",
   "webDir": "dist",
-  "bundledWebRuntime": false
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true,
+    "allowNavigation": [
+      "*.firebaseapp.com",
+      "*.googleapis.com",
+      "*.google.com",
+      "accounts.google.com"
+    ]
+  },
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "293907355720-kp5enb8cdva15e05bcnv9cvahntj6pem.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    }
+  }
 }
 ```
 
