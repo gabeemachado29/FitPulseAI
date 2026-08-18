@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Check, LogOut, Trash2, Shield, AlertTriangle } from 'lucide-react';
+import { Check, LogOut, Trash2, AlertTriangle } from 'lucide-react';
 import UserInfo from '../components/profile/UserInfo';
 import BodyMeasurements from '../components/profile/BodyMeasurements';
 import HealthMetrics from '../components/profile/HealthMetrics';
@@ -33,15 +33,15 @@ export default function ProfilePage() {
 
   const [formData, setFormData] = useState({
     height: 175,
-    weight: 114,
-    age: 22,
+    weight: 75,
+    age: 25,
     sex: 'masculino',
     activityLevel: 'sedentario',
-    calorieGoal: 2567,
-    hydrationGoal: 4025,
-    proteinGoal: 230,
-    carbsGoal: 251,
-    fatGoal: 71,
+    calorieGoal: 2200,
+    hydrationGoal: 2625,
+    proteinGoal: 150,
+    carbsGoal: 220,
+    fatGoal: 60,
   });
 
   const [saving, setSaving] = useState(false);
@@ -52,12 +52,22 @@ export default function ProfilePage() {
 
   const addToast = useToastStore((state) => state.addToast);
 
-  // Sync profile data when loaded from Firestore
+  // Sync profile data safely when loaded from Firestore
   useEffect(() => {
     if (profile) {
       setFormData((prev) => ({
         ...prev,
         ...profile,
+        height: Number(profile.height) || prev.height,
+        weight: Number(profile.weight) || prev.weight,
+        age: Number(profile.age) || prev.age,
+        sex: profile.sex || prev.sex,
+        activityLevel: profile.activityLevel || prev.activityLevel,
+        calorieGoal: Number(profile.calorieGoal) || prev.calorieGoal,
+        hydrationGoal: Number(profile.hydrationGoal) || prev.hydrationGoal,
+        proteinGoal: Number(profile.proteinGoal) || prev.proteinGoal,
+        carbsGoal: Number(profile.carbsGoal) || prev.carbsGoal,
+        fatGoal: Number(profile.fatGoal) || prev.fatGoal,
       }));
     }
   }, [profile]);
@@ -66,20 +76,18 @@ export default function ProfilePage() {
     setFormData((prev) => ({ ...prev, [field]: val }));
   };
 
-  // Recalculate health metrics dynamically
-  const { bmi, category: bmiCategory } = calculateBMI(
-    formData.weight,
-    formData.height
-  );
-  const bmr = calculateBMR(
-    formData.weight,
-    formData.height,
-    formData.age,
-    formData.sex
-  );
-  const tdee = calculateTDEE(bmr, formData.activityLevel);
-  const calculatedHydration = calculateHydrationGoal(formData.weight);
-  const calculatedMacros = calculateMacroGoals(formData.weight, tdee);
+  // Recalculate health metrics dynamically with safe fallbacks
+  const safeWeight = Number(formData.weight) || 75;
+  const safeHeight = Number(formData.height) || 175;
+  const safeAge = Number(formData.age) || 25;
+  const safeSex = formData.sex || 'masculino';
+  const safeActivity = formData.activityLevel || 'sedentario';
+
+  const { bmi, category: bmiCategory } = calculateBMI(safeWeight, safeHeight);
+  const bmr = calculateBMR(safeWeight, safeHeight, safeAge, safeSex);
+  const tdee = calculateTDEE(bmr, safeActivity);
+  const calculatedHydration = calculateHydrationGoal(safeWeight);
+  const calculatedMacros = calculateMacroGoals(safeWeight, tdee);
 
   const handleApplyRecommendation = () => {
     setFormData((prev) => ({

@@ -1,10 +1,13 @@
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 export function calculateBMI(weightKg, heightCm) {
-  if (!weightKg || !heightCm || heightCm <= 0) return { bmi: 0, category: '-' };
-  const heightM = heightCm / 100;
-  const bmi = parseFloat((weightKg / (heightM * heightM)).toFixed(1));
+  const w = Number(weightKg) || 0;
+  const h = Number(heightCm) || 0;
+
+  if (w <= 0 || h <= 0) return { bmi: 0, category: '-' };
+  const heightM = h / 100;
+  const bmi = parseFloat((w / (heightM * heightM)).toFixed(1));
 
   let category = 'Normal';
   if (bmi < 18.5) category = 'Abaixo do peso';
@@ -16,9 +19,15 @@ export function calculateBMI(weightKg, heightCm) {
 }
 
 export function calculateBMR(weightKg, heightCm, ageYears, sex = 'masculino') {
-  if (!weightKg || !heightCm || !ageYears) return 2000;
-  let bmr = 10 * weightKg + 6.25 * heightCm - 5 * ageYears;
-  if (sex.toLowerCase() === 'feminino') {
+  const w = Number(weightKg) || 0;
+  const h = Number(heightCm) || 0;
+  const a = Number(ageYears) || 0;
+
+  if (w <= 0 || h <= 0 || a <= 0) return 2000;
+
+  const safeSex = typeof sex === 'string' ? sex.toLowerCase() : 'masculino';
+  let bmr = 10 * w + 6.25 * h - 5 * a;
+  if (safeSex === 'feminino') {
     bmr -= 161;
   } else {
     bmr += 5;
@@ -34,23 +43,28 @@ export function calculateTDEE(bmr, activityLevel = 'sedentario') {
     ativo: 1.725,
     muito_ativo: 1.9,
   };
-  const factor = multipliers[activityLevel.toLowerCase()] || 1.2;
-  return Math.round(bmr * factor);
+  const safeActivity = typeof activityLevel === 'string' ? activityLevel.toLowerCase() : 'sedentario';
+  const factor = multipliers[safeActivity] || 1.2;
+  return Math.round((Number(bmr) || 2000) * factor);
 }
 
 export function calculateHydrationGoal(weightKg) {
-  if (!weightKg) return 2500;
-  return Math.round(weightKg * 35);
+  const w = Number(weightKg) || 0;
+  if (w <= 0) return 2500;
+  return Math.round(w * 35);
 }
 
 export function calculateMacroGoals(weightKg, tdee) {
-  if (!weightKg || !tdee) {
+  const w = Number(weightKg) || 0;
+  const t = Number(tdee) || 2000;
+
+  if (w <= 0 || t <= 0) {
     return { protein: 150, carbs: 200, fat: 60 };
   }
-  const protein = Math.round(weightKg * 2.0); // 2g per kg
-  const fat = Math.round(weightKg * 0.8);      // 0.8g per kg
+  const protein = Math.round(w * 2.0); // 2g per kg
+  const fat = Math.round(w * 0.8);      // 0.8g per kg
   const caloriesFromProteinAndFat = protein * 4 + fat * 9;
-  const remainingCalories = Math.max(0, tdee - caloriesFromProteinAndFat);
+  const remainingCalories = Math.max(0, t - caloriesFromProteinAndFat);
   const carbs = Math.round(remainingCalories / 4);
 
   return { protein, carbs, fat };
@@ -62,24 +76,38 @@ export async function fetchUserProfile(uid) {
   const snap = await getDoc(docRef);
 
   if (snap.exists()) {
-    return { id: snap.id, ...snap.data() };
+    const data = snap.data();
+    return {
+      id: snap.id,
+      height: Number(data.height) || 175,
+      weight: Number(data.weight) || 75,
+      age: Number(data.age) || 25,
+      sex: data.sex || 'masculino',
+      activityLevel: data.activityLevel || 'sedentario',
+      calorieGoal: Number(data.calorieGoal) || 2200,
+      hydrationGoal: Number(data.hydrationGoal) || 2625,
+      proteinGoal: Number(data.proteinGoal) || 150,
+      carbsGoal: Number(data.carbsGoal) || 220,
+      fatGoal: Number(data.fatGoal) || 60,
+      ...data,
+    };
   }
 
-  // Return default profile if new user
+  // Default profile for new user
   const defaultProfile = {
     height: 175,
-    weight: 114,
-    age: 22,
+    weight: 75,
+    age: 25,
     sex: 'masculino',
     activityLevel: 'sedentario',
-    calorieGoal: 2567,
-    hydrationGoal: 4025,
-    proteinGoal: 230,
-    carbsGoal: 251,
-    fatGoal: 71,
-    bmi: 37.2,
-    bmr: 2129,
-    tdee: 2555,
+    calorieGoal: 2200,
+    hydrationGoal: 2625,
+    proteinGoal: 150,
+    carbsGoal: 220,
+    fatGoal: 60,
+    bmi: 24.5,
+    bmr: 1730,
+    tdee: 2076,
   };
 
   await setDoc(docRef, { ...defaultProfile, createdAt: serverTimestamp() });
@@ -90,7 +118,8 @@ export async function saveUserProfile(uid, profileData) {
   if (!uid) throw new Error('User ID is required');
   const docRef = doc(db, 'users', uid);
 
-  const { bmi, category } = calculateBMI(profileData.height, profileData.weight);
+  // Correct order: weightKg first, heightCm second
+  const { bmi, category } = calculateBMI(profileData.weight, profileData.height);
   const bmr = calculateBMR(profileData.weight, profileData.height, profileData.age, profileData.sex);
   const tdee = calculateTDEE(bmr, profileData.activityLevel);
 
