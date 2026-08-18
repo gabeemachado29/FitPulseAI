@@ -73,7 +73,18 @@ export default function WorkoutsPage() {
 
     async function checkStrava() {
       const code = searchParams.get('code');
+      const stateParam = searchParams.get('state');
+
       if (code) {
+        if (!validateStravaState(stateParam, user.uid)) {
+          addToast('Falha de segurança na conexão com Strava. Tente novamente.', 'error');
+          searchParams.delete('code');
+          searchParams.delete('scope');
+          searchParams.delete('state');
+          setSearchParams(searchParams);
+          return;
+        }
+
         setStravaLoading(true);
         try {
           await exchangeStravaCode(user.uid, code);
@@ -85,6 +96,7 @@ export default function WorkoutsPage() {
           setSearchParams(searchParams);
         } catch (err) {
           console.error('Error exchanging Strava code:', err);
+          addToast('Erro ao conectar com Strava.', 'error');
         } finally {
           setStravaLoading(false);
         }

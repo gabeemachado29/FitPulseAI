@@ -9,7 +9,8 @@ import {
 import { auth, googleProvider } from '../config/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
-import { UserPlus, Mail, Lock } from 'lucide-react';
+import { UserPlus, Mail, Lock, Check, X } from 'lucide-react';
+import { getFirebaseAuthErrorMessage, validatePasswordStrength } from '../services/accountService';
 import styles from './RegisterPage.module.css';
 
 export default function RegisterPage() {
@@ -17,8 +18,14 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Password strength
+  const passwordCheck = validatePasswordStrength(password);
+  const strengthColors = ['var(--accent-red)', 'var(--accent-red)', 'var(--accent-orange)', 'var(--accent-yellow)', 'var(--accent-green)', 'var(--accent-green)'];
+  const strengthLabels = ['', 'Fraca', 'Fraca', 'Média', 'Boa', 'Forte'];
 
   // Initialize native GoogleAuth on mobile
   useEffect(() => {
@@ -35,31 +42,28 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
-    if (password !== confirmPassword) {
-      setError('As senhas não coincidem.');
+    if (!acceptedTerms) {
+      setError('Você precisa aceitar os Termos de Uso e Política de Privacidade.');
       return;
     }
 
-    if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres.');
+    if (!passwordCheck.valid) {
+      setError('Senha não atende os requisitos mínimos de segurança.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('As senhas não coincidem.');
       return;
     }
 
     setLoading(true);
 
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      await createUserWithEmailAndPassword(auth, email.trim(), password);
       navigate('/');
     } catch (err) {
-      if (err.code === 'auth/email-already-in-use') {
-        setError('Este e-mail já está cadastrado.');
-      } else if (err.code === 'auth/weak-password') {
-        setError('Senha muito fraca. Use pelo menos 6 caracteres.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('E-mail inválido.');
-      } else {
-        setError('Erro ao criar conta. Tente novamente.');
-      }
+      setError(getFirebaseAuthErrorMessage(err.code));
     } finally {
       setLoading(false);
     }
@@ -67,6 +71,12 @@ export default function RegisterPage() {
 
   const handleGoogleRegister = async () => {
     setError('');
+
+    if (!acceptedTerms) {
+      setError('Você precisa aceitar os Termos de Uso e Política de Privacidade.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -82,7 +92,7 @@ export default function RegisterPage() {
     } catch (err) {
       console.error('Google register error:', err);
       if (err.code !== 'auth/popup-closed-by-user') {
-        setError('Erro ao entrar com Google. Tente cadastrar com e-mail e senha.');
+        setError(getFirebaseAuthErrorMessage(err.code));
       }
     } finally {
       setLoading(false);
@@ -152,6 +162,53 @@ export default function RegisterPage() {
                   autoComplete="new-password"
                 />
               </div>
+
+              {/* Password Strength Indicator */}
+              {password.length > 0 && (
+                <div className={styles.strengthWrap}>
+                  <div className={styles.strengthBar}>
+                    <div
+                      className={styles.strengthFill}
+                      style={{
+                        width: `${(passwordCheck.score / 5) * 100}%`,
+                        backgroundColor: strengthColors[passwordCheck.score],
+                      }}
+                    />
+                  </div>
+                  <span
+                    className={styles.strengthLabel}
+                    style={{ color: strengthColors[passwordCheck.score] }}
+                  >
+                    {strengthLabels[passwordCheck.score]}
+                  </span>
+                  <div className={styles.strengthChecks}>
+                    {passwordCheck.feedback.map((item, i) => (
+                      <span key={i} className={styles.strengthItem}>
+                        <X size={12} color="var(--accent-red)" />
+                        {item}
+                      </span>
+                    ))}
+                    {password.length >= 8 && (
+                      <span className={styles.strengthItemOk}>
+                        <Check size={12} color="var(--accent-green)" />
+                        Mínimo 8 caracteres
+                      </span>
+                    )}
+                    {/[A-Z]/.test(password) && (
+                      <span className={styles.strengthItemOk}>
+                        <Check size={12} color="var(--accent-green)" />
+                        Letra maiúscula
+                      </span>
+                    )}
+                    {/[0-9]/.test(password) && (
+                      <span className={styles.strengthItemOk}>
+                        <Check size={12} color="var(--accent-green)" />
+                        Número
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className={styles.field}>
@@ -169,6 +226,27 @@ export default function RegisterPage() {
                   autoComplete="new-password"
                 />
               </div>
+              {confirmPassword && password !== confirmPassword && (
+                <span className={styles.mismatch}>As senhas não coincidem</span>
+              )}
+            </div>
+
+            {/* Terms & Privacy Checkbox */}
+            <div className={styles.termsField}>
+              <label className={styles.termsLabel}>
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className={styles.termsCheckbox}
+                />
+                <span className={styles.termsText}>
+                  Concordo com os{' '}
+                  <Link to="/terms" className={styles.termsLink}>Termos de Uso</Link>
+                  {' '}e{' '}
+                  <Link to="/privacy" className={styles.termsLink}>Política de Privacidade</Link>
+                </span>
+              </label>
             </div>
 
             {error && <p className={styles.error}>{error}</p>}
@@ -176,7 +254,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               className={styles.submitBtn}
-              disabled={loading}
+              disabled={loading || !acceptedTerms}
             >
               {loading ? 'Criando conta...' : 'Criar conta'}
             </button>

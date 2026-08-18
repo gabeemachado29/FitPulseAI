@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 export function getFormattedDateKey(date = new Date()) {
@@ -122,4 +122,38 @@ export async function fetchWeeklyNutritionLogs(uid) {
   );
 
   return logs;
+}
+
+/**
+ * Fetch all meals across nutrition logs that have a photo attached.
+ */
+export async function fetchMealsWithPhotos(uid) {
+  if (!uid) return [];
+
+  try {
+    const colRef = collection(db, 'users', uid, 'nutritionLogs');
+    const snap = await getDocs(colRef);
+    const photoMeals = [];
+
+    snap.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      const date = docSnap.id;
+      if (Array.isArray(data.meals)) {
+        data.meals.forEach((meal) => {
+          if (meal.photoBase64 || meal.source === 'foto' || meal.source === 'ai_photo') {
+            photoMeals.push({
+              ...meal,
+              date,
+            });
+          }
+        });
+      }
+    });
+
+    // Sort descending by timestamp/date
+    return photoMeals.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+  } catch (err) {
+    console.error('Error fetching photo meals:', err);
+    return [];
+  }
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Check, LogOut, Trash2 } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Check, LogOut, Trash2, Shield, AlertTriangle } from 'lucide-react';
 import UserInfo from '../components/profile/UserInfo';
 import BodyMeasurements from '../components/profile/BodyMeasurements';
 import HealthMetrics from '../components/profile/HealthMetrics';
@@ -8,9 +8,13 @@ import DailyGoals from '../components/profile/DailyGoals';
 import MacroGoals from '../components/profile/MacroGoals';
 import Button from '../components/ui/Button';
 import Loader from '../components/ui/Loader';
+import Modal from '../components/ui/Modal';
+import Input from '../components/ui/Input';
 import { useAuth } from '../hooks/useAuth';
 import { useProfile } from '../hooks/useProfile';
 import { useToastStore } from '../store/toastStore';
+import { auth } from '../config/firebase';
+import { deleteUserAccount } from '../services/accountService';
 import {
   calculateBMI,
   calculateBMR,
@@ -39,6 +43,11 @@ export default function ProfilePage() {
   });
 
   const [saving, setSaving] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   const addToast = useToastStore((state) => state.addToast);
 
   // Sync profile data when loaded from Firestore
@@ -109,14 +118,32 @@ export default function ProfilePage() {
     navigate('/login');
   };
 
-  const handleDeleteAccount = async () => {
-    if (
-      window.confirm(
-        'Tem certeza que deseja excluir sua conta? Esta ação é irreversível.'
-      )
-    ) {
-      await logout();
+  const handleConfirmDeleteAccount = async () => {
+    if (deleteConfirmText.trim().toUpperCase() !== 'EXCLUIR') {
+      setDeleteError('Digite EXCLUIR para confirmar.');
+      return;
+    }
+
+    setDeleting(true);
+    setDeleteError('');
+
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Usuário não encontrado');
+
+      await deleteUserAccount(currentUser);
+      addToast('Conta e dados excluídos com sucesso.', 'info');
+      setDeleteModalOpen(false);
       navigate('/login');
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      if (err.message === 'REQUIRES_REAUTH') {
+        setDeleteError('Por razões de segurança, faça logout e login novamente para excluir a conta.');
+      } else {
+        setDeleteError(err.message || 'Erro ao excluir conta.');
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -141,8 +168,6 @@ export default function ProfilePage() {
         {/* User Card */}
         <UserInfo user={user} />
 
-
-
         {/* Body Measurements */}
         <BodyMeasurements data={formData} onChange={handleChangeField} />
 
@@ -164,6 +189,9 @@ export default function ProfilePage() {
           onHydrationChange={(val) => handleChangeField('hydrationGoal', val)}
         />
 
+import ReportExporter from '../components/profile/ReportExporter';
+
+// ... inside ProfilePage JSX content:
         {/* Macro Goals */}
         <MacroGoals
           protein={formData.proteinGoal}
@@ -172,6 +200,9 @@ export default function ProfilePage() {
           onChange={handleChangeField}
           onCalculate={handleCalculateMacrosOnly}
         />
+
+        {/* Report Exporter Card for Nutritionist */}
+        <ReportExporter />
 
         {/* Save & Account Action Buttons */}
         <div className={styles.actions}>
@@ -200,15 +231,85 @@ export default function ProfilePage() {
             variant="danger"
             fullWidth
             icon={Trash2}
-            onClick={handleDeleteAccount}
+            onClick={() => {
+              setDeleteConfirmText('');
+              setDeleteError('');
+              setDeleteModalOpen(true);
+            }}
           >
             Excluir Conta
           </Button>
         </div>
 
-        {/* Footer label matching Base44 UI */}
-        <p className={styles.footer}>FitTrack • Powered by Base44</p>
+        {/* Legal & Privacy links */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', margin: '1.5rem 0 0.5rem 0' }}>
+          <Link to="/terms" style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', textDecoration: 'none' }}>
+            Termos de Uso
+          </Link>
+          <span style={{ color: 'var(--border-secondary)' }}>•</span>
+          <Link to="/privacy" style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', textDecoration: 'none' }}>
+            Política de Privacidade
+          </Link>
+        </div>
+
+        {/* Updated Footer branding for production */}
+        <p className={styles.footer}>FitPulseAI v1.0 • Todos os direitos reservados</p>
       </div>
+
+      {/* Real Account Deletion Confirmation Modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title="Excluir Conta Permanentemente"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.875rem', backgroundColor: 'rgba(239, 83, 80, 0.1)', border: '1px solid rgba(239, 83, 80, 0.3)', borderRadius: 'var(--radius-md)', color: 'var(--accent-red)' }}>
+            <AlertTriangle size={24} style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: '0.875rem', lineHeight: '1.4' }}>
+              <strong>Atenção LGPD:</strong> Esta ação excluirá todos os seus treinos, refeições, histórico e dados pessoais de forma <strong>irreversível</strong>.
+            </span>
+          </div>
+
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+            Para confirmar a exclusão permanente da sua conta, digite <strong>EXCLUIR</strong> no campo abaixo:
+          </p>
+
+          <Input
+            value={deleteConfirmText}
+            onChange={(val) => {
+              setDeleteConfirmText(val);
+              setDeleteError('');
+            }}
+            placeholder="Digite EXCLUIR"
+          />
+
+          {deleteError && (
+            <p style={{ color: 'var(--accent-red)', fontSize: '0.8125rem', margin: 0 }}>
+              {deleteError}
+            </p>
+          )}
+
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+            <Button
+              variant="ghost"
+              fullWidth
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              fullWidth
+              loading={deleting}
+              disabled={deleteConfirmText.trim().toUpperCase() !== 'EXCLUIR'}
+              onClick={handleConfirmDeleteAccount}
+            >
+              Sim, Excluir Tudo
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

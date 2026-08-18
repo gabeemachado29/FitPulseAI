@@ -1,11 +1,12 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutGrid, ScanLine, Dumbbell, User } from 'lucide-react';
+import { LayoutGrid, ScanLine, Dumbbell, Bot, User } from 'lucide-react';
 import styles from './BottomNav.module.css';
 
 const navItems = [
   { path: '/', label: 'Início', icon: LayoutGrid },
   { path: '/scanner', label: 'Scanner', icon: ScanLine },
   { path: '/workouts', label: 'Treinos', icon: Dumbbell },
+  { path: '/chat', label: 'IA', icon: Bot },
   { path: '/profile', label: 'Perfil', icon: User },
 ];
 

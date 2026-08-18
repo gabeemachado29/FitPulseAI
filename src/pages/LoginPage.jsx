@@ -10,6 +10,8 @@ import { auth, googleProvider } from '../config/firebase';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { LogIn, Mail, Lock } from 'lucide-react';
+import { sendPasswordReset, getFirebaseAuthErrorMessage } from '../services/accountService';
+import { useToastStore } from '../store/toastStore';
 import styles from './LoginPage.module.css';
 
 export default function LoginPage() {
@@ -18,6 +20,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const addToast = useToastStore((state) => state.addToast);
 
   // Initialize native GoogleAuth on mobile
   useEffect(() => {
@@ -36,16 +39,10 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email.trim(), password);
       navigate('/');
     } catch (err) {
-      if (err.code === 'auth/invalid-credential') {
-        setError('E-mail ou senha inválidos.');
-      } else if (err.code === 'auth/user-not-found') {
-        setError('Usuário não encontrado.');
-      } else {
-        setError('Erro ao entrar. Tente novamente.');
-      }
+      setError(getFirebaseAuthErrorMessage(err.code));
     } finally {
       setLoading(false);
     }
@@ -68,10 +65,20 @@ export default function LoginPage() {
     } catch (err) {
       console.error('Google login error:', err);
       if (err.code !== 'auth/popup-closed-by-user') {
-        setError('Erro ao entrar com Google. Tente entrar com e-mail e senha.');
+        setError(getFirebaseAuthErrorMessage(err.code));
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    try {
+      const message = await sendPasswordReset(email);
+      addToast(message, 'success', 5000);
+      setError('');
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -126,7 +133,11 @@ export default function LoginPage() {
             <div className={styles.field}>
               <div className={styles.labelRow}>
                 <label className={styles.label} htmlFor="login-password">Senha</label>
-                <button type="button" className={styles.forgotLink}>
+                <button
+                  type="button"
+                  className={styles.forgotLink}
+                  onClick={handleForgotPassword}
+                >
                   Esqueceu a senha?
                 </button>
               </div>
