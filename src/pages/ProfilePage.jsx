@@ -6,6 +6,8 @@ import BodyMeasurements from '../components/profile/BodyMeasurements';
 import HealthMetrics from '../components/profile/HealthMetrics';
 import DailyGoals from '../components/profile/DailyGoals';
 import MacroGoals from '../components/profile/MacroGoals';
+import ReportExporter from '../components/profile/ReportExporter';
+import AchievementGrid from '../components/achievements/AchievementGrid';
 import Button from '../components/ui/Button';
 import Loader from '../components/ui/Loader';
 import Modal from '../components/ui/Modal';
@@ -189,9 +191,6 @@ export default function ProfilePage() {
           onHydrationChange={(val) => handleChangeField('hydrationGoal', val)}
         />
 
-import ReportExporter from '../components/profile/ReportExporter';
-
-// ... inside ProfilePage JSX content:
         {/* Macro Goals */}
         <MacroGoals
           protein={formData.proteinGoal}
@@ -201,8 +200,30 @@ import ReportExporter from '../components/profile/ReportExporter';
           onCalculate={handleCalculateMacrosOnly}
         />
 
+        {/* Gamification & Badges Section */}
+        <AchievementGrid />
+
         {/* Report Exporter Card for Nutritionist */}
         <ReportExporter />
+
+        {/* Quick Navigation: Photo History & Social */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => navigate('/history')}
+          >
+            📸 Histórico de Fotos
+          </Button>
+
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => navigate('/social')}
+          >
+            👥 Social & Ranking
+          </Button>
+        </div>
 
         {/* Save & Account Action Buttons */}
         <div className={styles.actions}>

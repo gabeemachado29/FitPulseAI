@@ -15,6 +15,8 @@ import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import MealHistoryPage from './pages/MealHistoryPage';
 import ChatPage from './pages/ChatPage';
+import ReportPreviewPage from './pages/ReportPreviewPage';
+import SocialPage from './pages/SocialPage';
 
 /* ── Components ── */
 import BottomNav from './components/ui/BottomNav';
@@ -153,6 +155,24 @@ export default function App() {
             <ProtectedRoute>
               <AppLayout>
                 <ChatPage />
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/report"
+          element={
+            <ProtectedRoute>
+              <ReportPreviewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/social"
+          element={
+            <ProtectedRoute>
+              <AppLayout>
+                <SocialPage />
               </AppLayout>
             </ProtectedRoute>
           }

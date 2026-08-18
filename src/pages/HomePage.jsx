@@ -9,6 +9,7 @@ import CalorieCard from '../components/home/CalorieCard';
 import MealsList from '../components/home/MealsList';
 import MealEditModal from '../components/home/MealEditModal';
 import WaterTracker from '../components/home/WaterTracker';
+import HealthConnectCard from '../components/home/HealthConnectCard';
 import WeeklyChart from '../components/home/WeeklyChart';
 import NutritionDrawer from '../components/home/NutritionDrawer';
 import Loader from '../components/ui/Loader';
@@ -170,6 +171,9 @@ export default function HomePage() {
             onRemoveWater={removeWater}
             loading={waterLoading}
           />
+
+          {/* Smartwatch / Health Connect Widget */}
+          <HealthConnectCard />
 
           {/* Weekly Evolution Section */}
           <section className={styles.section}>
