@@ -1,5 +1,21 @@
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+
+const DEFAULT_PROFILE = {
+  height: 175,
+  weight: 75,
+  age: 25,
+  sex: 'masculino',
+  activityLevel: 'sedentario',
+  calorieGoal: 2200,
+  hydrationGoal: 2625,
+  proteinGoal: 150,
+  carbsGoal: 220,
+  fatGoal: 60,
+  bmi: 24.5,
+  bmr: 1730,
+  tdee: 2076,
+};
 
 export function calculateBMI(weightKg, heightCm) {
   const w = Number(weightKg) || 0;
@@ -61,8 +77,8 @@ export function calculateMacroGoals(weightKg, tdee) {
   if (w <= 0 || t <= 0) {
     return { protein: 150, carbs: 200, fat: 60 };
   }
-  const protein = Math.round(w * 2.0); // 2g per kg
-  const fat = Math.round(w * 0.8);      // 0.8g per kg
+  const protein = Math.round(w * 2.0);
+  const fat = Math.round(w * 0.8);
   const caloriesFromProteinAndFat = protein * 4 + fat * 9;
   const remainingCalories = Math.max(0, t - caloriesFromProteinAndFat);
   const carbs = Math.round(remainingCalories / 4);
@@ -70,55 +86,52 @@ export function calculateMacroGoals(weightKg, tdee) {
   return { protein, carbs, fat };
 }
 
+/**
+ * Fetch user profile from Firestore with timeout protection to prevent page load hangs.
+ */
 export async function fetchUserProfile(uid) {
-  if (!uid) return null;
-  const docRef = doc(db, 'users', uid);
-  const snap = await getDoc(docRef);
+  if (!uid) return DEFAULT_PROFILE;
 
-  if (snap.exists()) {
-    const data = snap.data();
-    return {
-      id: snap.id,
-      height: Number(data.height) || 175,
-      weight: Number(data.weight) || 75,
-      age: Number(data.age) || 25,
-      sex: data.sex || 'masculino',
-      activityLevel: data.activityLevel || 'sedentario',
-      calorieGoal: Number(data.calorieGoal) || 2200,
-      hydrationGoal: Number(data.hydrationGoal) || 2625,
-      proteinGoal: Number(data.proteinGoal) || 150,
-      carbsGoal: Number(data.carbsGoal) || 220,
-      fatGoal: Number(data.fatGoal) || 60,
-      ...data,
-    };
+  try {
+    const docRef = doc(db, 'users', uid);
+
+    // Timeout getDoc after 3 seconds so page never gets stuck
+    const snap = await Promise.race([
+      getDoc(docRef),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000)),
+    ]);
+
+    if (snap && snap.exists()) {
+      const data = snap.data();
+      return {
+        id: snap.id,
+        height: Number(data.height) || DEFAULT_PROFILE.height,
+        weight: Number(data.weight) || DEFAULT_PROFILE.weight,
+        age: Number(data.age) || DEFAULT_PROFILE.age,
+        sex: data.sex || DEFAULT_PROFILE.sex,
+        activityLevel: data.activityLevel || DEFAULT_PROFILE.activityLevel,
+        calorieGoal: Number(data.calorieGoal) || DEFAULT_PROFILE.calorieGoal,
+        hydrationGoal: Number(data.hydrationGoal) || DEFAULT_PROFILE.hydrationGoal,
+        proteinGoal: Number(data.proteinGoal) || DEFAULT_PROFILE.proteinGoal,
+        carbsGoal: Number(data.carbsGoal) || DEFAULT_PROFILE.carbsGoal,
+        fatGoal: Number(data.fatGoal) || DEFAULT_PROFILE.fatGoal,
+        ...data,
+      };
+    }
+
+    // Save initial profile in background if doc doesn't exist
+    setDoc(docRef, { ...DEFAULT_PROFILE, createdAt: new Date().toISOString() }).catch(console.warn);
+    return DEFAULT_PROFILE;
+  } catch (err) {
+    console.warn('fetchUserProfile timeout or error, using default profile:', err.message);
+    return DEFAULT_PROFILE;
   }
-
-  // Default profile for new user
-  const defaultProfile = {
-    height: 175,
-    weight: 75,
-    age: 25,
-    sex: 'masculino',
-    activityLevel: 'sedentario',
-    calorieGoal: 2200,
-    hydrationGoal: 2625,
-    proteinGoal: 150,
-    carbsGoal: 220,
-    fatGoal: 60,
-    bmi: 24.5,
-    bmr: 1730,
-    tdee: 2076,
-  };
-
-  await setDoc(docRef, { ...defaultProfile, createdAt: serverTimestamp() });
-  return defaultProfile;
 }
 
 export async function saveUserProfile(uid, profileData) {
   if (!uid) throw new Error('User ID is required');
   const docRef = doc(db, 'users', uid);
 
-  // Correct order: weightKg first, heightCm second
   const { bmi, category } = calculateBMI(profileData.weight, profileData.height);
   const bmr = calculateBMR(profileData.weight, profileData.height, profileData.age, profileData.sex);
   const tdee = calculateTDEE(bmr, profileData.activityLevel);
@@ -129,7 +142,7 @@ export async function saveUserProfile(uid, profileData) {
     bmiCategory: category,
     bmr,
     tdee,
-    updatedAt: serverTimestamp(),
+    updatedAt: new Date().toISOString(),
   };
 
   await setDoc(docRef, updatedData, { merge: true });

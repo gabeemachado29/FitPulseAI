@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Check, LogOut, Trash2, AlertTriangle } from 'lucide-react';
 import UserInfo from '../components/profile/UserInfo';
@@ -9,7 +9,7 @@ import MacroGoals from '../components/profile/MacroGoals';
 import ReportExporter from '../components/profile/ReportExporter';
 import AchievementGrid from '../components/achievements/AchievementGrid';
 import Button from '../components/ui/Button';
-import Loader from '../components/ui/Loader';
+import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 import { useAuth } from '../hooks/useAuth';
@@ -26,10 +26,49 @@ import {
 } from '../services/profileService';
 import styles from './ProfilePage.module.css';
 
-export default function ProfilePage() {
+class ProfileErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('ProfilePage Error Boundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="page-container animate-fade-in" style={{ padding: '2rem 1rem' }}>
+          <div className="page-header">
+            <h1 className="page-header__title">Perfil</h1>
+          </div>
+          <Card variant="bordered" padding="lg" style={{ textAlign: 'center', margin: '1rem 0' }}>
+            <AlertTriangle size={40} color="var(--accent-orange)" style={{ margin: '0 auto 1rem auto' }} />
+            <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Erro na exibição do perfil</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+              {this.state.error?.message || 'Ocorreu um erro imprevisto ao carregar este componente.'}
+            </p>
+            <Button variant="primary" fullWidth onClick={() => window.location.reload()}>
+              Recarregar Página
+            </Button>
+          </Card>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function ProfileContent() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { profile, loading, updateProfile } = useProfile();
+  const { profile, updateProfile } = useProfile();
 
   const [formData, setFormData] = useState({
     height: 175,
@@ -156,14 +195,6 @@ export default function ProfilePage() {
       setDeleting(false);
     }
   };
-
-  if (loading && !profile) {
-    return (
-      <div className="page-container">
-        <Loader fullScreen />
-      </div>
-    );
-  }
 
   return (
     <div className="page-container animate-fade-in">
@@ -340,5 +371,13 @@ export default function ProfilePage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <ProfileErrorBoundary>
+      <ProfileContent />
+    </ProfileErrorBoundary>
   );
 }

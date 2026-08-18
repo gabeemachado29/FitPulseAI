@@ -3,11 +3,14 @@ import Input from '../ui/Input';
 import styles from './DailyGoals.module.css';
 
 export default function DailyGoals({
-  calorieGoal,
-  hydrationGoal,
+  calorieGoal = 2200,
+  hydrationGoal = 2625,
   onCalorieChange,
   onHydrationChange,
 }) {
+  const safeCalorie = Number(calorieGoal) || 2200;
+  const safeHydration = Number(hydrationGoal) || 2625;
+
   return (
     <div className={styles.container}>
       <div className={styles.field}>
@@ -17,10 +20,10 @@ export default function DailyGoals({
         </div>
         <Input
           type="number"
-          value={calorieGoal}
-          onChange={(val) => onCalorieChange(Number(val))}
+          value={safeCalorie}
+          onChange={(val) => onCalorieChange && onCalorieChange(Number(val) || 0)}
           suffix="kcal"
-          placeholder="2567"
+          placeholder="2200"
         />
       </div>
 
@@ -31,10 +34,10 @@ export default function DailyGoals({
         </div>
         <Input
           type="number"
-          value={hydrationGoal}
-          onChange={(val) => onHydrationChange(Number(val))}
+          value={safeHydration}
+          onChange={(val) => onHydrationChange && onHydrationChange(Number(val) || 0)}
           suffix="ml"
-          placeholder="4025"
+          placeholder="2625"
         />
       </div>
     </div>

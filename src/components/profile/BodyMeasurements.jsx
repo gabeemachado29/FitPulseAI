@@ -16,7 +16,13 @@ const ACTIVITY_OPTIONS = [
   { value: 'muito_ativo', label: 'Muito ativo' },
 ];
 
-export default function BodyMeasurements({ data, onChange }) {
+export default function BodyMeasurements({ data = {}, onChange }) {
+  const safeHeight = data?.height ?? 175;
+  const safeWeight = data?.weight ?? 75;
+  const safeAge = data?.age ?? 25;
+  const safeSex = data?.sex || 'masculino';
+  const safeActivity = data?.activityLevel || 'sedentario';
+
   return (
     <div className={styles.card}>
       <div className={styles.titleRow}>
@@ -29,17 +35,17 @@ export default function BodyMeasurements({ data, onChange }) {
           id="height-input"
           label="Altura (cm)"
           type="number"
-          value={data.height}
-          onChange={(val) => onChange('height', Number(val))}
+          value={safeHeight}
+          onChange={(val) => onChange && onChange('height', Number(val) || 0)}
           placeholder="175"
         />
         <Input
           id="weight-input"
           label="Peso (kg)"
           type="number"
-          value={data.weight}
-          onChange={(val) => onChange('weight', Number(val))}
-          placeholder="114"
+          value={safeWeight}
+          onChange={(val) => onChange && onChange('weight', Number(val) || 0)}
+          placeholder="75"
         />
       </div>
 
@@ -48,17 +54,17 @@ export default function BodyMeasurements({ data, onChange }) {
           id="age-input"
           label="Idade"
           type="number"
-          value={data.age}
-          onChange={(val) => onChange('age', Number(val))}
-          placeholder="22"
+          value={safeAge}
+          onChange={(val) => onChange && onChange('age', Number(val) || 0)}
+          placeholder="25"
         />
 
         <div className={styles.sexSection}>
           <label className={styles.sexLabel}>Sexo biológico</label>
           <PillToggle
             options={SEX_OPTIONS}
-            value={data.sex || 'masculino'}
-            onChange={(val) => onChange('sex', val)}
+            value={safeSex}
+            onChange={(val) => onChange && onChange('sex', val)}
             fullWidth
           />
         </div>
@@ -68,8 +74,8 @@ export default function BodyMeasurements({ data, onChange }) {
         <label className={styles.activityLabel}>Nível de atividade</label>
         <PillToggle
           options={ACTIVITY_OPTIONS}
-          value={data.activityLevel || 'sedentario'}
-          onChange={(val) => onChange('activityLevel', val)}
+          value={safeActivity}
+          onChange={(val) => onChange && onChange('activityLevel', val)}
         />
       </div>
     </div>

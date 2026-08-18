@@ -12,10 +12,16 @@ export default function AchievementGrid() {
 
   useEffect(() => {
     if (!user) return;
-    fetchUserAchievements(user.uid).then(setUnlocked);
+    fetchUserAchievements(user.uid)
+      .then((res) => setUnlocked(Array.isArray(res) ? res : []))
+      .catch((err) => {
+        console.warn('Error in AchievementGrid fetch:', err);
+        setUnlocked([]);
+      });
   }, [user]);
 
-  const unlockedIds = new Set(unlocked.map((a) => a.id));
+  const unlockedList = Array.isArray(unlocked) ? unlocked : [];
+  const unlockedIds = new Set(unlockedList.map((a) => a?.id).filter(Boolean));
 
   return (
     <Card variant="bordered" padding="lg" className={styles.card}>
@@ -25,7 +31,7 @@ export default function AchievementGrid() {
           <h3 className={styles.title}>Conquistas & Medalhas 🏆</h3>
         </div>
         <span className={styles.countBadge}>
-          {unlocked.length} / {ALL_ACHIEVEMENTS.length}
+          {unlockedList.length} / {ALL_ACHIEVEMENTS.length}
         </span>
       </div>
 

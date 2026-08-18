@@ -3,12 +3,16 @@ import Input from '../ui/Input';
 import styles from './MacroGoals.module.css';
 
 export default function MacroGoals({
-  protein,
-  carbs,
-  fat,
+  protein = 150,
+  carbs = 220,
+  fat = 60,
   onChange,
   onCalculate,
 }) {
+  const safeProtein = Number(protein) || 150;
+  const safeCarbs = Number(carbs) || 220;
+  const safeFat = Number(fat) || 60;
+
   return (
     <div className={styles.card}>
       <div className={styles.header}>
@@ -23,10 +27,10 @@ export default function MacroGoals({
           <label className={styles.label}>Proteína</label>
           <Input
             type="number"
-            value={protein}
-            onChange={(val) => onChange('proteinGoal', Number(val))}
+            value={safeProtein}
+            onChange={(val) => onChange && onChange('proteinGoal', Number(val) || 0)}
             suffix="g"
-            placeholder="230"
+            placeholder="150"
           />
         </div>
 
@@ -34,10 +38,10 @@ export default function MacroGoals({
           <label className={styles.label}>Carbs</label>
           <Input
             type="number"
-            value={carbs}
-            onChange={(val) => onChange('carbsGoal', Number(val))}
+            value={safeCarbs}
+            onChange={(val) => onChange && onChange('carbsGoal', Number(val) || 0)}
             suffix="g"
-            placeholder="251"
+            placeholder="220"
           />
         </div>
 
@@ -45,10 +49,10 @@ export default function MacroGoals({
           <label className={styles.label}>Gordura</label>
           <Input
             type="number"
-            value={fat}
-            onChange={(val) => onChange('fatGoal', Number(val))}
+            value={safeFat}
+            onChange={(val) => onChange && onChange('fatGoal', Number(val) || 0)}
             suffix="g"
-            placeholder="71"
+            placeholder="60"
           />
         </div>
       </div>

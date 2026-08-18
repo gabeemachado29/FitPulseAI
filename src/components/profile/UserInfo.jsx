@@ -2,9 +2,15 @@ import Card from '../ui/Card';
 import styles from './UserInfo.module.css';
 
 export default function UserInfo({ user }) {
-  const name = user?.displayName || 'Gabriel Machado França';
-  const email = user?.email || 'gabrielmachado.f29@gmail.com';
-  const initial = name.charAt(0).toUpperCase();
+  const name =
+    user && typeof user.displayName === 'string' && user.displayName.trim()
+      ? user.displayName
+      : user && typeof user.email === 'string' && user.email.trim()
+      ? user.email.split('@')[0]
+      : 'Atleta';
+
+  const email = user && typeof user.email === 'string' ? user.email : '';
+  const initial = name ? String(name).charAt(0).toUpperCase() : 'A';
 
   return (
     <Card variant="default" padding="lg" className={styles.card}>
@@ -13,7 +19,7 @@ export default function UserInfo({ user }) {
       </div>
       <div className={styles.details}>
         <h2 className={styles.name}>{name}</h2>
-        <p className={styles.email}>{email}</p>
+        {email && <p className={styles.email}>{email}</p>}
       </div>
     </Card>
   );
