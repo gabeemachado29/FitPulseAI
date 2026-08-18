@@ -1,11 +1,25 @@
-import { useNavigate } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FileText, Download } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import styles from './ReportExporter.module.css';
 
 export default function ReportExporter() {
-  const navigate = useNavigate();
+  let navigate;
+  try {
+    const rawNavigate = useNavigate();
+    navigate = (path) => {
+      if (typeof rawNavigate === 'function') {
+        rawNavigate(path);
+      } else {
+        window.location.href = path;
+      }
+    };
+  } catch (e) {
+    navigate = (path) => {
+      window.location.href = path;
+    };
+  }
 
   return (
     <Card variant="bordered" padding="lg" className={styles.card}>

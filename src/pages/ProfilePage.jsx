@@ -66,7 +66,23 @@ class ProfileErrorBoundary extends React.Component {
 }
 
 function ProfileContent() {
-  const navigate = useNavigate();
+  // Safe navigation fallback to prevent 'useNavigate is not a function' errors
+  let navigate;
+  try {
+    const rawNavigate = useNavigate();
+    navigate = (path) => {
+      if (typeof rawNavigate === 'function') {
+        rawNavigate(path);
+      } else {
+        window.location.href = path;
+      }
+    };
+  } catch (e) {
+    navigate = (path) => {
+      window.location.href = path;
+    };
+  }
+
   const { user, logout } = useAuth();
   const { profile, updateProfile } = useProfile();
 

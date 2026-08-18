@@ -1,7 +1,7 @@
 /**
  * FitPulseAI — AI Scanner Service (Production-Grade)
  *
- * Uses Google Gemini 2.5 Flash for food recognition and nutritional estimation.
+ * Uses Google Gemini 1.5 Flash for food recognition and nutritional estimation.
  * Features:
  * - Professional nutritionist prompts (PT-BR)
  * - Image compression before sending
@@ -13,8 +13,9 @@
 
 import { compressImage, stripBase64Prefix } from './imageUtils';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+// gemini-1.5-flash is the official production model supported on all Google AI keys
+const PRIMARY_MODEL = 'gemini-1.5-flash';
+const FALLBACK_MODEL = 'gemini-2.0-flash-exp';
 
 // Retry delays in ms
 const RETRY_DELAYS = [1500, 3500];
@@ -101,11 +102,6 @@ REGRAS OBRIGATÓRIAS:
 
 // ── Main API Functions ──
 
-/**
- * Analyze a text description of a meal using Gemini 2.5 Flash.
- * @param {string} description - User's meal description in Portuguese
- * @returns {Promise<object>} - Nutritional analysis result
- */
 export async function analyzeTextMeal(description) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
@@ -138,12 +134,6 @@ export async function analyzeTextMeal(description) {
   return normalizeResult(result, 'texto');
 }
 
-/**
- * Analyze a photo of a meal using Gemini 2.5 Flash vision capabilities.
- * @param {string} base64Data - Base64 image data (data URI or raw)
- * @param {string} mimeType - MIME type of the image
- * @returns {Promise<object>} - Nutritional analysis result
- */
 export async function analyzePhotoMeal(base64Data, mimeType = 'image/jpeg') {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
@@ -151,7 +141,6 @@ export async function analyzePhotoMeal(base64Data, mimeType = 'image/jpeg') {
     throw new Error('API_KEY_MISSING');
   }
 
-  // Compress image to reduce payload size and avoid timeouts
   let compressedBase64;
   let compressionInfo;
 
@@ -159,9 +148,6 @@ export async function analyzePhotoMeal(base64Data, mimeType = 'image/jpeg') {
     compressionInfo = await compressImage(base64Data, 1024, 0.85);
     compressedBase64 = compressionInfo.base64;
     mimeType = compressionInfo.mimeType;
-    console.log(
-      `📸 Imagem comprimida: ${compressionInfo.originalSizeKB}KB → ${compressionInfo.compressedSizeKB}KB (${compressionInfo.width}×${compressionInfo.height})`
-    );
   } catch (compErr) {
     console.warn('Compressão falhou, usando imagem original:', compErr);
     compressedBase64 = stripBase64Prefix(base64Data);
@@ -200,75 +186,65 @@ export async function analyzePhotoMeal(base64Data, mimeType = 'image/jpeg') {
 
 // ── Internal Helpers ──
 
-/**
- * Call Gemini API with retry + exponential backoff.
- */
 async function callGeminiWithRetry(apiKey, requestBody) {
   let lastError = null;
+  const models = [PRIMARY_MODEL, FALLBACK_MODEL];
 
-  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
-    try {
-      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
+  for (const modelName of models) {
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`Gemini API error (${response.status}):`, errorBody);
+    for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+      try {
+        const response = await fetch(`${apiUrl}?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
 
-        // Don't retry on auth or quota errors
-        if (response.status === 401 || response.status === 403) {
-          throw new Error('API_KEY_INVALID');
+        if (!response.ok) {
+          const errorBody = await response.text();
+          console.error(`Gemini API error (${modelName} - ${response.status}):`, errorBody);
+
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('API_KEY_INVALID');
+          }
+          if (response.status === 429) {
+            throw new Error('RATE_LIMITED');
+          }
+
+          throw new Error(`API_ERROR_${response.status}`);
         }
-        if (response.status === 429) {
-          throw new Error('RATE_LIMITED');
+
+        const data = await response.json();
+        const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!jsonText) {
+          const finishReason = data.candidates?.[0]?.finishReason;
+          if (finishReason === 'SAFETY') {
+            throw new Error('CONTENT_BLOCKED');
+          }
+          throw new Error('EMPTY_RESPONSE');
         }
 
-        throw new Error(`API_ERROR_${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Extract and validate response
-      const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!jsonText) {
-        // Check for safety blocks
-        const finishReason = data.candidates?.[0]?.finishReason;
-        if (finishReason === 'SAFETY') {
-          throw new Error('CONTENT_BLOCKED');
+        return JSON.parse(jsonText);
+      } catch (err) {
+        lastError = err;
+        const noRetryErrors = ['API_KEY_MISSING', 'API_KEY_INVALID', 'RATE_LIMITED', 'CONTENT_BLOCKED'];
+        if (noRetryErrors.includes(err.message)) {
+          throw err;
         }
-        throw new Error('EMPTY_RESPONSE');
-      }
 
-      return JSON.parse(jsonText);
-    } catch (err) {
-      lastError = err;
-
-      // Don't retry certain errors
-      const noRetryErrors = ['API_KEY_MISSING', 'API_KEY_INVALID', 'RATE_LIMITED', 'CONTENT_BLOCKED'];
-      if (noRetryErrors.includes(err.message)) {
-        throw err;
-      }
-
-      // Wait before retrying
-      if (attempt < RETRY_DELAYS.length) {
-        console.warn(`Gemini tentativa ${attempt + 1} falhou, retentando em ${RETRY_DELAYS[attempt]}ms...`, err.message);
-        await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+        if (attempt < RETRY_DELAYS.length) {
+          await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+        }
       }
     }
   }
 
-  // All retries exhausted
   console.error('Gemini API: todas as tentativas falharam:', lastError);
   throw new Error('AI_UNAVAILABLE');
 }
 
-/**
- * Normalize and validate the AI response.
- */
 function normalizeResult(parsed, source) {
   return {
     name: (parsed.name || 'Refeição Analisada').substring(0, 80),
@@ -293,15 +269,12 @@ function normalizeResult(parsed, source) {
   };
 }
 
-/**
- * Get a user-friendly error message in PT-BR.
- */
 export function getAIErrorMessage(errorCode) {
   const messages = {
     API_KEY_MISSING:
-      'Chave da API Gemini não configurada. Vá em Configurações e adicione sua VITE_GEMINI_API_KEY.',
+      'Chave da API Gemini não configurada nas variáveis de ambiente.',
     API_KEY_INVALID:
-      'Chave da API Gemini inválida ou expirada. Verifique sua chave em aistudio.google.com.',
+      'Chave da API Gemini inválida ou expirada. Verifique sua chave.',
     RATE_LIMITED:
       'Limite de requisições atingido. Aguarde alguns segundos e tente novamente.',
     CONTENT_BLOCKED:

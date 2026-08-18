@@ -1,18 +1,11 @@
 /**
  * FitPulseAI — AI Nutrition Assistant Chat Service
- * Powered by Gemini 2.5 Flash with full user context injection.
+ * Powered by Gemini 1.5 Flash with full user context injection.
  */
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-/**
- * Send a chat message to Gemini with injected user context.
- * @param {string} userMessage - User's query
- * @param {Array<{role: 'user'|'model', text: string}>} history - Previous messages
- * @param {object} userContext - Current user profile, daily log, remaining macros
- * @returns {Promise<string>} AI response text
- */
 export async function sendNutritionChatMessage(userMessage, history = [], userContext = {}) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
@@ -20,7 +13,6 @@ export async function sendNutritionChatMessage(userMessage, history = [], userCo
     return 'Desculpe, a chave da API do Gemini não está configurada nas variáveis de ambiente.';
   }
 
-  // Construct system prompt with live user context
   const systemPrompt = `Você é o FitPulse AI 🤖, um assistente nutricional e esportivo pessoal empático, motivador e especialista em nutrição esportiva.
 
 CONTEXTO ATUAL DO USUÁRIO:
@@ -39,10 +31,8 @@ DIRETRIZES DE RESPOSTA:
 5. Responda SEMPRE em português do Brasil
 6. Nunca dê diagnósticos médicos. Recomende acompanhamento profissional quando apropriado.`;
 
-  // Format message contents array for Gemini
   const contents = [];
 
-  // Add conversation history
   if (Array.isArray(history)) {
     history.forEach((msg) => {
       contents.push({
@@ -52,7 +42,6 @@ DIRETRIZES DE RESPOSTA:
     });
   }
 
-  // Add current message
   contents.push({
     role: 'user',
     parts: [{ text: userMessage }],
