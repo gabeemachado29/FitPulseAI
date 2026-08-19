@@ -28,7 +28,11 @@ export async function performGoogleSignIn() {
   if (Capacitor.isNativePlatform()) {
     try {
       try {
-        GoogleAuth.initialize();
+        await GoogleAuth.initialize({
+          clientId: '293907355720-kp5enb8cdva15e05bcnv9cvahntj6pem.apps.googleusercontent.com',
+          scopes: ['profile', 'email'],
+          grantOfflineAccess: true,
+        });
       } catch (initErr) {
         console.warn('GoogleAuth initialize warning:', initErr);
       }
@@ -36,34 +40,28 @@ export async function performGoogleSignIn() {
       const googleUser = await GoogleAuth.signIn();
       const idToken =
         googleUser?.authentication?.idToken ||
-        googleUser?.idToken ||
-        googleUser?.authentication?.accessToken;
+        googleUser?.idToken;
 
-      if (idToken) {
-        const credential = GoogleAuthProvider.credential(idToken);
-        const userCred = await signInWithCredential(auth, credential);
-        return userCred.user;
+      if (!idToken) {
+        throw new Error('Nenhum token retornado pelo Google Sign-In.');
       }
-    } catch (nativeErr) {
-      console.warn('Native GoogleAuth failed, falling back to Web Popup:', nativeErr);
-    }
 
-    // Fallback to Firebase Web Popup/Redirect on native if plugin fails
-    try {
-      const userCred = await signInWithPopup(auth, googleProvider);
+      const credential = GoogleAuthProvider.credential(idToken);
+      const userCred = await signInWithCredential(auth, credential);
       return userCred.user;
-    } catch (popupErr) {
-      if (
-        popupErr.code === 'auth/popup-blocked' ||
-        popupErr.code === 'auth/operation-not-supported-in-this-environment'
-      ) {
-        await signInWithRedirect(auth, googleProvider);
-        return null;
+    } catch (nativeErr) {
+      console.error('Native GoogleAuth error:', nativeErr);
+      const errCode = nativeErr?.code || nativeErr?.message || String(nativeErr);
+      if (errCode === '12500' || errCode.includes('cancel') || errCode.includes('popup-closed')) {
+        throw new Error('auth/popup-closed-by-user');
       }
-      throw popupErr;
+      if (errCode === '10' || errCode.includes('DEVELOPER_ERROR')) {
+        throw new Error('Erro de configuração do Google Play Services (SHA-1 fingerprint necessário no Firebase Console).');
+      }
+      throw nativeErr;
     }
   } else {
-    // Standard Web Flow
+    // Standard Web Flow (PC / Browser)
     try {
       const userCred = await signInWithPopup(auth, googleProvider);
       return userCred.user;

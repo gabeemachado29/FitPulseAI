@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth } from './config/firebase';
 import { useAuthStore } from './store/authStore';
 
@@ -67,6 +67,11 @@ export default function App() {
   const setLoading = useAuthStore((state) => state.setLoading);
 
   useEffect(() => {
+    // Check if returning from a redirect
+    getRedirectResult(auth).catch((err) => {
+      console.warn('Redirect auth result info:', err);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         setUser({
