@@ -1,67 +1,56 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Type, AlertTriangle } from 'lucide-react';
-import PillToggle from '../components/ui/PillToggle';
-import PhotoScanner from '../components/scanner/PhotoScanner';
-import TextScanner from '../components/scanner/TextScanner';
+import { Sparkles, AlertTriangle, HelpCircle, UtensilsCrossed } from 'lucide-react';
+import MultimodalScannerInput from '../components/scanner/MultimodalScannerInput';
 import ScanResult from '../components/scanner/ScanResult';
 import Button from '../components/ui/Button';
 import Loader from '../components/ui/Loader';
 import Card from '../components/ui/Card';
 import { useNutrition } from '../hooks/useNutrition';
 import { useToastStore } from '../store/toastStore';
-import { analyzeTextMeal, analyzePhotoMeal, getAIErrorMessage } from '../services/aiScannerService';
+import { analyzeMeal, getAIErrorMessage } from '../services/aiScannerService';
 import styles from './ScannerPage.module.css';
-
-const TABS = [
-  { value: 'foto', label: 'Foto', icon: <Camera size={16} /> },
-  { value: 'texto', label: 'Texto', icon: <Type size={16} /> },
-];
 
 export default function ScannerPage() {
   const navigate = useNavigate();
   const { addMeal } = useNutrition();
-
   const addToast = useToastStore((state) => state.addToast);
 
-  const [activeTab, setActiveTab] = useState('foto');
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [nonFoodWarning, setNonFoodWarning] = useState(null);
 
-  // Store last input for retry
-  const [lastTextInput, setLastTextInput] = useState('');
-  const [lastPhotoInput, setLastPhotoInput] = useState(null);
+  // Store last input state for retrying
+  const [lastInput, setLastInput] = useState({ photo: null, text: '' });
 
-  const handleAnalyzeText = async (description) => {
+  const handleAnalyze = async ({ imageFile, imageBase64, textDescription }) => {
     setAnalyzing(true);
     setResult(null);
     setError(null);
-    setLastTextInput(description);
+    setNonFoodWarning(null);
+    setLastInput({ photo: imageBase64, text: textDescription || '' });
 
     try {
-      const data = await analyzeTextMeal(description);
-      setResult(data);
-    } catch (err) {
-      console.error('Error analyzing text meal:', err);
-      setError(getAIErrorMessage(err.message));
-    } finally {
-      setAnalyzing(false);
-    }
-  };
+      const data = await analyzeMeal({
+        imageFile,
+        imageBase64,
+        textDescription,
+      });
 
-  const handleAnalyzePhoto = async (base64Data, mimeType) => {
-    setAnalyzing(true);
-    setResult(null);
-    setError(null);
-    setLastPhotoInput({ base64Data, mimeType });
-
-    try {
-      const data = await analyzePhotoMeal(base64Data, mimeType);
-      setResult(data);
+      // Check if food was identified
+      if (data.is_food === false) {
+        setNonFoodWarning({
+          title: 'Não identificamos alimentos',
+          message: 'A inteligência artificial não identificou itens alimentícios nesta foto ou descrição.',
+          notes: data.notes || data.meal_summary || 'Tente tirar uma foto mais clara ou detalhar melhor os ingredientes.',
+        });
+      } else {
+        setResult(data);
+      }
     } catch (err) {
-      console.error('Error analyzing photo meal:', err);
+      console.error('Error in food analysis:', err);
       setError(getAIErrorMessage(err.message));
     } finally {
       setAnalyzing(false);
@@ -69,38 +58,48 @@ export default function ScannerPage() {
   };
 
   const handleRetry = () => {
-    if (activeTab === 'texto' && lastTextInput) {
-      handleAnalyzeText(lastTextInput);
-    } else if (activeTab === 'foto' && lastPhotoInput) {
-      handleAnalyzePhoto(lastPhotoInput.base64Data, lastPhotoInput.mimeType);
+    if (lastInput.photo || lastInput.text) {
+      handleAnalyze({
+        imageBase64: lastInput.photo,
+        textDescription: lastInput.text,
+      });
     } else {
-      setError(null);
+      handleReset();
     }
+  };
+
+  const handleReset = () => {
+    setResult(null);
+    setError(null);
+    setNonFoodWarning(null);
   };
 
   const handleSaveMeal = async (mealData) => {
     setSaving(true);
     try {
       await addMeal({
-        description: mealData.name,
+        description: mealData.description || mealData.name,
         calories: mealData.calories,
         protein: mealData.protein,
         carbs: mealData.carbs,
         fat: mealData.fat,
         fiber: mealData.fiber || 0,
         items: mealData.items || [],
-        confidence: mealData.confidence || 'media',
-        source: mealData.source || activeTab,
-        photoBase64: activeTab === 'foto' ? lastPhotoInput?.base64Data : null,
+        confidence: mealData.confidence || 'high',
+        input_mode: mealData.input_mode || 'hybrid',
+        health_insights: mealData.health_insights || [],
+        notes: mealData.notes || '',
+        photoBase64: lastInput.photo || null,
         timestamp: new Date().toISOString(),
       });
-      addToast('Refeição salva com sucesso!', 'success');
+
+      addToast('Refeição adicionada ao diário com sucesso!', 'success');
       setTimeout(() => {
         navigate('/');
-      }, 1200);
+      }, 1000);
     } catch (err) {
-      console.error('Error saving meal:', err);
-      addToast('Erro ao salvar refeição.', 'error');
+      console.error('Error saving meal to log:', err);
+      addToast('Erro ao salvar refeição. Tente novamente.', 'error');
     } finally {
       setSaving(false);
     }
@@ -108,79 +107,92 @@ export default function ScannerPage() {
 
   return (
     <div className="page-container animate-fade-in">
+      {/* Page Header */}
       <div className="page-header">
-        <h1 className="page-header__title">Scanner de Refeições</h1>
-        <p className="page-header__subtitle">
-          Por foto ou por descrição — a IA calcula as calorias
+        <h1 className="page-header__title">Scanner Multimodal de Refeições</h1>
+        <p className={styles.headerSubtitle}>
+          Analise por foto, por texto ou combinados com inteligência nutricional TACO/USDA
         </p>
       </div>
 
-      <div className={styles.tabWrap}>
-        <PillToggle
-          options={TABS}
-          value={activeTab}
-          onChange={(tab) => {
-            setActiveTab(tab);
-            setResult(null);
-            setError(null);
-          }}
-          fullWidth
-          size="lg"
-        />
-      </div>
-
-      {analyzing ? (
+      {/* Loading State with Glowing Pulse */}
+      {analyzing && (
         <div className={styles.analyzingWrap}>
-          <Loader size={40} />
-          <p className={styles.analyzingText}>
-            {activeTab === 'foto'
-              ? 'Analisando sua foto com Gemini 2.5 Flash...'
-              : 'A IA está analisando sua refeição...'}
-          </p>
+          <div className={styles.radarGlow} />
+          <div className={styles.aiIndicator}>
+            <Sparkles size={14} />
+            <span>Motor Nutricional IA FitPulse</span>
+          </div>
+          <Loader size={44} />
+          <p className={styles.analyzingText}>Analisando refeição com Gemini 1.5 Flash Vision...</p>
           <p className={styles.analyzingSubtext}>
-            Identificando alimentos e calculando macros
+            Decompondo ingredientes, calculando gramas e validando macronutrientes pela equação de Atwater.
           </p>
         </div>
-      ) : error ? (
+      )}
+
+      {/* Non-Food Alert State (is_food === false) */}
+      {!analyzing && nonFoodWarning && (
         <Card variant="bordered" padding="lg" className={styles.errorCard}>
           <div className={styles.errorContent}>
-            <div className={styles.errorIcon}>
-              <AlertTriangle size={32} color="var(--accent-orange)" />
+            <div className={`${styles.errorIconWrap} ${styles.errorIconOrange}`}>
+              <UtensilsCrossed size={30} color="var(--accent-orange)" />
             </div>
-            <h3 className={styles.errorTitle}>Não foi possível analisar</h3>
-            <p className={styles.errorMessage}>{error}</p>
+            <h3 className={styles.errorTitle}>{nonFoodWarning.title}</h3>
+            <p className={styles.errorMessage}>{nonFoodWarning.message}</p>
+            {nonFoodWarning.notes && (
+              <div className={styles.errorNotes}>
+                <strong>Observação da IA:</strong> {nonFoodWarning.notes}
+              </div>
+            )}
             <div className={styles.errorActions}>
-              <Button
-                variant="primary"
-                fullWidth
-                onClick={handleRetry}
-              >
-                Tentar novamente
-              </Button>
-              <Button
-                variant="ghost"
-                fullWidth
-                onClick={() => {
-                  setError(null);
-                  setResult(null);
-                }}
-              >
-                Voltar ao scanner
+              <Button variant="primary" fullWidth onClick={handleReset}>
+                Tentar novamente com outra foto/texto
               </Button>
             </div>
           </div>
         </Card>
-      ) : result ? (
+      )}
+
+      {/* Error State */}
+      {!analyzing && !nonFoodWarning && error && (
+        <Card variant="bordered" padding="lg" className={styles.errorCard}>
+          <div className={styles.errorContent}>
+            <div className={`${styles.errorIconWrap} ${styles.errorIconRed}`}>
+              <AlertTriangle size={30} color="var(--accent-red)" />
+            </div>
+            <h3 className={styles.errorTitle}>Não foi possível concluir a análise</h3>
+            <p className={styles.errorMessage}>{error}</p>
+            <div className={styles.errorActions}>
+              <Button variant="primary" fullWidth onClick={handleRetry}>
+                Tentar novamente
+              </Button>
+              <Button variant="ghost" fullWidth onClick={handleReset}>
+                Voltar ao início
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Results View */}
+      {!analyzing && !nonFoodWarning && !error && result && (
         <ScanResult
           result={result}
           onSaveMeal={handleSaveMeal}
-          onReset={() => setResult(null)}
+          onReset={handleReset}
           saving={saving}
         />
-      ) : activeTab === 'foto' ? (
-        <PhotoScanner onAnalyzePhoto={handleAnalyzePhoto} loading={analyzing} />
-      ) : (
-        <TextScanner onAnalyzeText={handleAnalyzeText} loading={analyzing} />
+      )}
+
+      {/* Main Input View */}
+      {!analyzing && !nonFoodWarning && !error && !result && (
+        <MultimodalScannerInput
+          onAnalyze={handleAnalyze}
+          loading={analyzing}
+          initialPhoto={lastInput.photo}
+          initialText={lastInput.text}
+        />
       )}
     </div>
   );

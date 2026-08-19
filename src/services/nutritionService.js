@@ -140,7 +140,13 @@ export async function fetchMealsWithPhotos(uid) {
       const date = docSnap.id;
       if (Array.isArray(data.meals)) {
         data.meals.forEach((meal) => {
-          if (meal.photoBase64 || meal.source === 'foto' || meal.source === 'ai_photo') {
+          if (
+            meal.photoBase64 ||
+            meal.source === 'foto' ||
+            meal.source === 'ai_photo' ||
+            meal.input_mode === 'image' ||
+            meal.input_mode === 'hybrid'
+          ) {
             photoMeals.push({
               ...meal,
               date,
