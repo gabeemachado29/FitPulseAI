@@ -42,9 +42,9 @@ export default function ScannerPage() {
       // Check if food was identified
       if (data.is_food === false) {
         setNonFoodWarning({
-          title: 'Não identificamos alimentos',
-          message: 'A inteligência artificial não identificou itens alimentícios nesta foto ou descrição.',
-          notes: data.notes || data.meal_summary || 'Tente tirar uma foto mais clara ou detalhar melhor os ingredientes.',
+          title: 'Nenhum alimento identificado',
+          message: 'Nenhum alimento identificado. Tente enviar uma foto mais nítida ou descrever a refeição por texto.',
+          notes: data.notes || data.meal_summary || '',
         });
       } else {
         setResult(data);
