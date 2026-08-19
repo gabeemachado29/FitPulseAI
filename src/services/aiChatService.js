@@ -1,10 +1,17 @@
 /**
  * FitPulseAI — AI Nutrition Assistant Chat Service
- * Powered by Gemini 1.5 Flash with full user context injection.
+ * Powered by Google Gemini Flash with full user context injection.
  */
 
-const GEMINI_MODEL = 'gemini-1.5-flash';
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const SUPPORTED_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-3.7-flash',
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+  'gemini-1.5-flash',
+];
 
 export async function sendNutritionChatMessage(userMessage, history = [], userContext = {}) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -31,8 +38,9 @@ DIRETRIZES DE RESPOSTA:
 5. Responda SEMPRE em português do Brasil
 6. Nunca dê diagnósticos médicos. Recomende acompanhamento profissional quando apropriado.`;
 
-  const contents = [];
+  const genAI = new GoogleGenerativeAI(apiKey.trim());
 
+  const contents = [];
   if (Array.isArray(history)) {
     history.forEach((msg) => {
       contents.push({
@@ -47,32 +55,31 @@ DIRETRIZES DE RESPOSTA:
     parts: [{ text: userMessage }],
   });
 
-  try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        contents,
+  for (const modelName of SUPPORTED_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: systemPrompt,
         generationConfig: {
           temperature: 0.7,
           maxOutputTokens: 1024,
         },
-      }),
-    });
+      });
 
-    if (!response.ok) {
-      throw new Error(`Chat API error: ${response.status}`);
+      const result = await model.generateContent({ contents });
+      const textOutput = result.response?.text?.();
+
+      if (textOutput) {
+        return textOutput;
+      }
+    } catch (err) {
+      console.warn(`Chat com modelo ${modelName} falhou:`, err.message);
+      if (err.message?.includes('404') || err.message?.includes('not found') || err.message?.includes('no longer available')) {
+        continue;
+      }
+      break;
     }
-
-    const data = await response.json();
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    return reply || 'Desculpe, não consegui processar sua pergunta. Tente novamente!';
-  } catch (err) {
-    console.error('Error in AI nutrition chat:', err);
-    return 'Tive um problema ao conectar com a IA. Por favor, tente novamente em instantes.';
   }
+
+  return 'Tive um problema ao conectar com a IA. Por favor, tente novamente em instantes.';
 }

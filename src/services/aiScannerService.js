@@ -1,13 +1,20 @@
 /**
  * FitPulseAI — High-Precision Multimodal Food AI Service
- * Powered by Google Gemini 1.5 Flash with Native Structured Outputs (Response Schema).
+ * Powered by Google Gemini Flash with Native Structured Outputs (Response Schema).
  */
 
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { compressImage } from './imageUtils';
 import { parseFoodAnalysisResult, cleanAndParseJson } from './foodAnalysisModels';
 
-const GEMINI_MODEL = 'gemini-1.5-flash';
+// Primary models ordered by performance and compatibility
+const SUPPORTED_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-3.7-flash',
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+  'gemini-1.5-flash',
+];
 
 /**
  * Retorna uma chave de API válida para o Google Gemini.
@@ -16,13 +23,13 @@ function getApiKey() {
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const firebaseKey = import.meta.env.VITE_FIREBASE_API_KEY;
 
-  if (geminiKey && typeof geminiKey === 'string' && geminiKey.trim().startsWith('AIzaSy')) {
+  if (geminiKey && typeof geminiKey === 'string' && geminiKey.trim().length > 10 && !geminiKey.includes('your_gemini')) {
     return geminiKey.trim();
   }
-  if (firebaseKey && typeof firebaseKey === 'string' && firebaseKey.trim().startsWith('AIzaSy')) {
+  if (firebaseKey && typeof firebaseKey === 'string' && firebaseKey.trim().length > 10) {
     return firebaseKey.trim();
   }
-  return 'AIzaSyCp4Hdx13bFDJ1TE3qrCzZ5G6KtgUWu1Qc';
+  return '';
 }
 
 /**
@@ -125,7 +132,7 @@ export const FOOD_ANALYSIS_RESPONSE_SCHEMA = {
  */
 export class FoodAnalysisService {
   /**
-   * Método unificado para análise alimentar por IA com Google Gemini 1.5 Flash.
+   * Método unificado para análise alimentar por IA com Google Gemini Flash.
    * Suporta imagem (bytes, File, ou Base64), texto ou ambos combinados.
    *
    * @param {object} params
@@ -151,6 +158,11 @@ export class FoodAnalysisService {
       throw new Error('VALIDATION_ERROR: Forneça uma foto ou descreva sua refeição por texto.');
     }
 
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error('API_KEY_MISSING');
+    }
+
     let inputMode = 'text';
     if (hasImage && hasText) {
       inputMode = 'hybrid';
@@ -158,18 +170,7 @@ export class FoodAnalysisService {
       inputMode = 'image';
     }
 
-    const apiKey = getApiKey();
     const genAI = new GoogleGenerativeAI(apiKey);
-
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      systemInstruction: SYSTEM_INSTRUCTION,
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: FOOD_ANALYSIS_RESPONSE_SCHEMA,
-        temperature: 0.1, // Evita alucinações matemáticas
-      },
-    });
 
     const parts = [];
 
@@ -179,7 +180,6 @@ export class FoodAnalysisService {
       let targetMime = mimeType || 'image/jpeg';
 
       if (typeof rawImage === 'string' && !rawImage.startsWith('data:') && !rawImage.startsWith('http')) {
-        // Raw base64 string
         const comp = await compressImage(`data:${targetMime};base64,${rawImage}`, 1024, 0.85);
         base64Data = comp.base64;
         targetMime = comp.mimeType || targetMime;
@@ -212,20 +212,40 @@ export class FoodAnalysisService {
       });
     }
 
-    try {
-      const response = await model.generateContent(parts);
-      const textOutput = response.response?.text?.();
+    // Tenta os modelos suportados sequencialmente em caso de modelo não encontrado
+    let lastError = null;
+    for (const modelName of SUPPORTED_MODELS) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: SYSTEM_INSTRUCTION,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: FOOD_ANALYSIS_RESPONSE_SCHEMA,
+            temperature: 0.1, // Evita alucinações matemáticas
+          },
+        });
 
-      if (!textOutput) {
-        throw new Error('EMPTY_RESPONSE');
+        const response = await model.generateContent(parts);
+        const textOutput = response.response?.text?.();
+
+        if (textOutput) {
+          const parsedJson = cleanAndParseJson(textOutput);
+          return parseFoodAnalysisResult(parsedJson, inputMode);
+        }
+      } catch (err) {
+        console.warn(`Tentativa com ${modelName} falhou:`, err.message);
+        lastError = err;
+        // Se o erro for 404 (modelo não disponível nesta chave), tenta o próximo modelo
+        if (err.message?.includes('404') || err.message?.includes('not found') || err.message?.includes('no longer available')) {
+          continue;
+        }
+        // Se for outro tipo de erro (ex: 403, segurança), propaga
+        throw err;
       }
-
-      const parsedJson = cleanAndParseJson(textOutput);
-      return parseFoodAnalysisResult(parsedJson, inputMode);
-    } catch (err) {
-      console.error('❌ Erro na chamada do Gemini SDK:', err);
-      throw err;
     }
+
+    throw lastError || new Error('EMPTY_RESPONSE');
   }
 }
 
@@ -271,27 +291,40 @@ export async function analyzeTextMeal(description) {
 }
 
 /**
- * Mensagens amigáveis para tratamento de erros
+ * Mensagens amigáveis e diagnósticas para tratamento de erros
  */
-export function getAIErrorMessage(errorCode) {
-  if (!errorCode) return 'Erro inesperado na análise. Tente novamente.';
+export function getAIErrorMessage(error) {
+  if (!error) return 'Erro inesperado na análise. Tente novamente.';
 
-  const str = String(errorCode);
+  const str = typeof error === 'string' ? error : error?.message || String(error);
+
   if (str.includes('VALIDATION_ERROR')) {
     return str.replace('VALIDATION_ERROR: ', '');
   }
-  if (str.includes('RATE_LIMITED') || str.includes('429')) {
+
+  if (str.includes('API_KEY_SERVICE_BLOCKED') || (str.includes('403') && str.includes('blocked'))) {
+    return 'A API do Gemini está bloqueada para esta chave no Google Cloud (API_KEY_SERVICE_BLOCKED). Para corrigir: acesse o Google AI Studio (aistudio.google.com), gere uma nova API Key gratuita do Gemini e configure VITE_GEMINI_API_KEY no arquivo .env.';
+  }
+
+  if (str.includes('API_KEY_MISSING') || str.includes('API_KEY_INVALID') || str.includes('400')) {
+    return 'Chave da API do Gemini inválida ou não configurada. Verifique a variável VITE_GEMINI_API_KEY no arquivo .env.';
+  }
+
+  if (str.includes('403') || str.includes('PERMISSION_DENIED')) {
+    return 'Permissão negada (403) para acessar a API do Gemini. Certifique-se de que a API Generative Language está habilitada no projeto.';
+  }
+
+  if (str.includes('RATE_LIMITED') || str.includes('429') || str.includes('RESOURCE_EXHAUSTED')) {
     return 'Limite de requisições temporário atingido. Aguarde alguns instantes e tente novamente.';
   }
+
   if (str.includes('CONTENT_BLOCKED') || str.includes('SAFETY')) {
-    return 'A imagem ou texto foi bloqueado pelas diretrizes de segurança.';
+    return 'A imagem ou texto foi bloqueado pelas diretrizes de segurança da IA.';
   }
-  if (str.includes('API_KEY_INVALID') || str.includes('API_KEY_MISSING')) {
-    return 'Chave de API do Gemini não configurada ou inválida.';
-  }
+
   if (str.includes('EMPTY_RESPONSE') || str.includes('INVALID_JSON_RESPONSE')) {
     return 'A IA não conseguiu interpretar os dados da refeição. Tente fornecer mais detalhes ou uma foto mais nítida.';
   }
 
-  return 'Ocorreu um erro ao comunicar com a inteligência artificial. Verifique sua conexão e tente novamente.';
+  return `Falha na comunicação com o Gemini: ${str.length < 120 ? str : 'Verifique sua conexão ou chave de API.'}`;
 }
