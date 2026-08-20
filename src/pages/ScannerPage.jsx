@@ -124,7 +124,7 @@ export default function ScannerPage() {
             <span>Motor Nutricional IA FitPulse</span>
           </div>
           <Loader size={44} />
-          <p className={styles.analyzingText}>Analisando refeição com Gemini 1.5 Flash Vision...</p>
+          <p className={styles.analyzingText}>Analisando refeição com Gemini 3.6 Flash Vision...</p>
           <p className={styles.analyzingSubtext}>
             Decompondo ingredientes, calculando gramas e validando macronutrientes pela equação de Atwater.
           </p>

@@ -7,11 +7,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GeminiKeyManager } from './geminiKeyManager';
 
 const SUPPORTED_MODELS = [
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-latest',
-  'gemini-1.5-flash-8b',
-  'gemini-2.0-flash',
-  'gemini-flash-latest',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
 ];
 
 /**
@@ -78,48 +75,66 @@ DIRETRIZES DE RESPOSTA DO PULSEBOT:
     parts: [{ text: userMessage.trim() }],
   });
 
-  return await GeminiKeyManager.executeWithFallback(
-    async (apiKey) => {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      let lastModelErr = null;
+  try {
+    return await GeminiKeyManager.executeWithFallback(
+      async (apiKey) => {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        let lastModelErr = null;
 
-      for (const modelName of SUPPORTED_MODELS) {
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction: systemInstruction,
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 1024,
-            },
-          });
+        for (const modelName of SUPPORTED_MODELS) {
+          try {
+            const model = genAI.getGenerativeModel({
+              model: modelName,
+              systemInstruction: systemInstruction,
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 1024,
+              },
+            });
 
-          const result = await model.generateContent({ contents });
-          const textOutput = result.response?.text?.();
+            const result = await model.generateContent({ contents });
+            const textOutput = result.response?.text?.();
 
-          if (textOutput) {
-            return textOutput;
-          }
-        } catch (err) {
-          console.warn(`[PulseBot] Falha com modelo ${modelName}:`, err.message);
-          lastModelErr = err;
+            if (textOutput) {
+              return textOutput;
+            }
+          } catch (err) {
+            console.warn(`[PulseBot] Falha com modelo ${modelName}:`, err.message);
+            lastModelErr = err;
 
-          if (GeminiKeyManager.isRateLimitError(err)) {
-            throw err;
-          }
+            if (GeminiKeyManager.isRateLimitError(err)) {
+              throw err;
+            }
 
-          if (err.message?.includes('404') || err.message?.includes('not found') || err.message?.includes('no longer available')) {
+            if (err.message?.includes('404') || err.message?.includes('not found') || err.message?.includes('no longer available')) {
+              continue;
+            }
+
+            if (err.message?.includes('401') || err.message?.includes('403') || err.message?.includes('blocked') || err.message?.includes('credentials')) {
+              throw err;
+            }
+
             continue;
           }
-
-          continue;
         }
-      }
 
-      throw lastModelErr || new Error('EMPTY_RESPONSE');
-    },
-    { timeoutMs: 30000 }
-  );
+        throw lastModelErr || new Error('EMPTY_RESPONSE');
+      },
+      { timeoutMs: 30000 }
+    );
+  } catch (err) {
+    const msg = err?.message || String(err);
+    if (msg.includes('401') || msg.includes('credentials') || msg.includes('API_KEY_INVALID')) {
+      return '⚠️ A chave da API do Gemini (VITE_GEMINI_API_KEY no arquivo .env) é inválida ou não autorizada. Gere uma chave gratuita no Google AI Studio (https://aistudio.google.com/app/apikey) e cole no .env.';
+    }
+    if (msg.includes('403') || msg.includes('blocked')) {
+      return '⚠️ Acesso à API do Gemini bloqueado nesta chave (403). Gere uma chave de API do Gemini no Google AI Studio (https://aistudio.google.com/app/apikey) e configure em VITE_GEMINI_API_KEY no arquivo .env.';
+    }
+    if (msg.includes('TIMEOUT')) {
+      return '⏱️ A resposta demorou mais que 30s. Verifique sua conexão e tente novamente.';
+    }
+    return 'Desculpe, tive um problema ao me comunicar com a IA do Gemini. Verifique a configuração da chave VITE_GEMINI_API_KEY no arquivo .env.';
+  }
 }
 
 /**

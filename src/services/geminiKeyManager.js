@@ -10,6 +10,8 @@ class GeminiKeyPoolManager {
   constructor() {
     this.keys = this._loadCandidateKeys();
     this.currentIndex = 0;
+    // Track keys confirmed as permanently invalid (401/403)
+    this._deadKeys = new Set();
   }
 
   /**
@@ -53,7 +55,6 @@ class GeminiKeyPoolManager {
    */
   getCurrentKey() {
     if (this.keys.length === 0) {
-      // Reload in case env variables were populated dynamically
       this.keys = this._loadCandidateKeys();
     }
     if (this.keys.length === 0) {
@@ -63,17 +64,42 @@ class GeminiKeyPoolManager {
   }
 
   /**
-   * Rotates to the next available API key in the pool.
+   * Rotates to the next available API key in the pool, skipping dead keys.
    */
   rotateKey() {
-    if (this.keys.length > 1) {
-      this.currentIndex = (this.currentIndex + 1) % this.keys.length;
-      console.warn(
-        `[GeminiKeyManager] Chave de API alternada para o índice ${this.currentIndex} (Total: ${this.keys.length})`
-      );
+    if (this.keys.length <= 1) {
       return this.getCurrentKey();
     }
+
+    const startIndex = this.currentIndex;
+    for (let i = 0; i < this.keys.length; i++) {
+      this.currentIndex = (this.currentIndex + 1) % this.keys.length;
+      const candidate = this.keys[this.currentIndex];
+      if (!this._deadKeys.has(candidate)) {
+        console.warn(
+          `[GeminiKeyManager] Chave alternada para índice ${this.currentIndex} (Total: ${this.keys.length}, Mortas: ${this._deadKeys.size})`
+        );
+        return candidate;
+      }
+    }
+    // All keys are dead, reset to original
+    this.currentIndex = startIndex;
     return this.getCurrentKey();
+  }
+
+  /**
+   * Mark a key as permanently invalid (401 Unauthorized / 403 Forbidden).
+   */
+  markKeyDead(key) {
+    this._deadKeys.add(key);
+    console.warn(`[GeminiKeyManager] Chave marcada como inválida: ${key.substring(0, 12)}...`);
+  }
+
+  /**
+   * Returns true if ALL keys are dead (invalid/blocked).
+   */
+  allKeysDead() {
+    return this._deadKeys.size >= this.keys.length;
   }
 
   /**
@@ -95,8 +121,29 @@ class GeminiKeyPoolManager {
   }
 
   /**
+   * Checks if an error represents a permanent auth failure (invalid or blocked key).
+   */
+  isAuthError(error) {
+    if (!error) return false;
+    const msg = String(error?.message || error).toLowerCase();
+    return (
+      msg.includes('401') ||
+      msg.includes('403') ||
+      msg.includes('invalid authentication') ||
+      msg.includes('api key not valid') ||
+      msg.includes('api_key_invalid') ||
+      msg.includes('permission_denied') ||
+      msg.includes('blocked') ||
+      msg.includes('credentials')
+    );
+  }
+
+  /**
    * Executes a Gemini API call with automatic timeout protection (30s),
    * transparent key pool rotation upon 429 errors, and retry backoff.
+   * 
+   * IMPORTANT: Auth errors (401/403) immediately mark the key as dead
+   * and either try the next key or fail fast — no long retries.
    *
    * @template T
    * @param {(apiKey: string) => Promise<T>} apiCallFn
@@ -108,7 +155,17 @@ class GeminiKeyPoolManager {
   async executeWithFallback(apiCallFn, options = {}) {
     const timeoutMs = options.timeoutMs || 30000;
     const totalKeys = Math.max(1, this.keys.length);
-    const maxAttempts = options.maxKeyAttempts || Math.max(3, totalKeys * 2);
+    // Cap max attempts to avoid infinite spinning
+    const maxAttempts = options.maxKeyAttempts || Math.min(totalKeys + 2, 4);
+
+    if (this.keys.length === 0) {
+      throw new Error('API_KEY_MISSING');
+    }
+
+    // If all keys are already known-dead, fail immediately
+    if (this.allKeysDead()) {
+      throw new Error('API_KEY_INVALID: Todas as chaves de API configuradas são inválidas (401/403). Configure uma chave válida do Google AI Studio em VITE_GEMINI_API_KEY no .env.');
+    }
 
     let lastError = null;
 
@@ -118,8 +175,17 @@ class GeminiKeyPoolManager {
         throw new Error('API_KEY_MISSING');
       }
 
+      // Skip known-dead keys
+      if (this._deadKeys.has(apiKey)) {
+        const nextKey = this.rotateKey();
+        if (this._deadKeys.has(nextKey) || this.allKeysDead()) {
+          throw new Error('API_KEY_INVALID: Todas as chaves de API configuradas são inválidas. Configure uma chave válida do Google AI Studio em VITE_GEMINI_API_KEY no .env.');
+        }
+        continue;
+      }
+
       try {
-        // Wrap execution in a resilient 30-second timeout
+        // Wrap execution in a resilient timeout
         const result = await Promise.race([
           apiCallFn(apiKey),
           new Promise((_, reject) =>
@@ -140,32 +206,45 @@ class GeminiKeyPoolManager {
         lastError = err;
         console.warn(`[GeminiKeyManager] Tentativa ${attempt + 1}/${maxAttempts} falhou:`, err.message);
 
-        // If rate limit or quota exceeded, rotate key immediately and retry
+        // ── AUTH ERRORS: Mark key as dead and try next or fail fast ──
+        if (this.isAuthError(err)) {
+          this.markKeyDead(apiKey);
+          if (this.allKeysDead()) {
+            throw new Error('API_KEY_INVALID: Todas as chaves de API configuradas são inválidas (401/403). Gere uma chave gratuita em https://aistudio.google.com/app/apikey e configure em VITE_GEMINI_API_KEY no .env.');
+          }
+          this.rotateKey();
+          continue;
+        }
+
+        // ── RATE LIMIT: Rotate key or brief wait ──
         if (this.isRateLimitError(err)) {
           if (this.keys.length > 1) {
             this.rotateKey();
-            // Short jitter before retrying next key
             await new Promise((r) => setTimeout(r, 400));
             continue;
           } else {
-            // Single key with rate limit: wait briefly before retrying
             await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
             continue;
           }
         }
 
-        // If 404 (model not found on this endpoint/version) or 503 (server overloaded), retry or pass
+        // ── TIMEOUT: Fail immediately, don't retry ──
+        if (err.message?.includes('TIMEOUT_ERROR')) {
+          throw err;
+        }
+
+        // ── VALIDATION / SAFETY: Fail immediately ──
+        if (err.message?.includes('VALIDATION_ERROR') || err.message?.includes('SAFETY')) {
+          throw err;
+        }
+
+        // ── 503 / overloaded: brief wait then retry once ──
         if (err.message?.includes('503') || err.message?.includes('overloaded')) {
           await new Promise((r) => setTimeout(r, 800));
           continue;
         }
 
-        // For non-retryable errors (e.g. invalid input, strict safety block), rethrow immediately
-        if (err.message?.includes('VALIDATION_ERROR') || err.message?.includes('SAFETY')) {
-          throw err;
-        }
-
-        // For model version or generic errors, try next attempt
+        // ── Generic error: try next key if available ──
         if (attempt < maxAttempts - 1) {
           this.rotateKey();
           await new Promise((r) => setTimeout(r, 300));
