@@ -1,21 +1,22 @@
 /**
- * FitPulseAI — Account Management Service (Production-Ready)
+ * FitPulseAI — Account Management Service (Production-Ready & LGPD Compliant)
  *
- * Handles account deletion (LGPD compliant), password reset,
- * Google Auth fallback pipeline, and re-authentication.
+ * Handles account deletion, data export (LGPD), password reset,
+ * secure password updates, Google Auth pipeline, and input validations.
  */
 
 import {
   sendPasswordResetEmail,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  updatePassword,
   deleteUser,
   signInWithPopup,
   signInWithRedirect,
   signInWithCredential,
   GoogleAuthProvider,
 } from 'firebase/auth';
-import { doc, deleteDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { auth, db, googleProvider } from '../config/firebase';
@@ -84,7 +85,7 @@ export async function sendPasswordReset(email) {
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
+  if (!emailRegex.test(email.trim())) {
     throw new Error('Formato de e-mail inválido.');
   }
 
@@ -97,8 +98,127 @@ export async function sendPasswordReset(email) {
 }
 
 /**
+ * Safely updates user password, handling re-authentication if required.
+ *
+ * @param {import('firebase/auth').User} user
+ * @param {string} currentPassword
+ * @param {string} newPassword
+ */
+export async function updateUserPasswordSafe(user, currentPassword, newPassword) {
+  if (!user) throw new Error('Usuário não autenticado.');
+  if (!newPassword || newPassword.length < 8) {
+    throw new Error('A nova senha deve ter pelo menos 8 caracteres.');
+  }
+
+  // Check if user has password provider
+  const isPasswordProvider = user.providerData?.some(
+    (p) => p.providerId === 'password'
+  );
+
+  if (isPasswordProvider && currentPassword) {
+    try {
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+    } catch (reauthErr) {
+      throw new Error('Senha atual incorreta. Verifique e tente novamente.');
+    }
+  }
+
+  try {
+    await updatePassword(user, newPassword);
+    return 'Senha alterada com sucesso!';
+  } catch (err) {
+    if (err.code === 'auth/requires-recent-login') {
+      throw new Error('Por segurança, faça login novamente antes de alterar a senha.');
+    }
+    throw new Error(getFirebaseAuthErrorMessage(err.code || err.message));
+  }
+}
+
+/**
+ * LGPD Data Portability: Exports all user data into a JSON file and triggers download.
+ *
+ * @param {string} uid
+ * @param {string} [userEmail]
+ */
+export async function exportAllUserData(uid, userEmail = '') {
+  if (!uid) throw new Error('User ID é obrigatório para exportação.');
+
+  const exportData = {
+    metadata: {
+      exportedAt: new Date().toISOString(),
+      service: 'FitPulseAI',
+      version: '1.0',
+      compliance: 'LGPD (Lei Geral de Proteção de Dados - Lei nº 13.709/2018)',
+      user: {
+        uid,
+        email: userEmail,
+      },
+    },
+    profile: null,
+    nutritionLogs: [],
+    waterLogs: [],
+    workouts: [],
+    workoutSessions: [],
+    burnedLogs: [],
+    achievements: [],
+  };
+
+  try {
+    // 1. Profile Doc
+    const profileDocRef = doc(db, 'users', uid);
+    const profileSnap = await getDoc(profileDocRef);
+    if (profileSnap.exists()) {
+      exportData.profile = profileSnap.data();
+    }
+
+    // 2. Subcollections
+    const collectionsToFetch = [
+      'nutritionLogs',
+      'waterLogs',
+      'workouts',
+      'workoutSessions',
+      'burnedLogs',
+      'achievements',
+    ];
+
+    for (const colName of collectionsToFetch) {
+      try {
+        const colRef = collection(db, 'users', uid, colName);
+        const snapshot = await getDocs(colRef);
+        if (!snapshot.empty) {
+          exportData[colName] = snapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+          }));
+        }
+      } catch (colErr) {
+        console.warn(`Aviso ao exportar ${colName}:`, colErr);
+      }
+    }
+
+    // 3. Trigger Browser File Download
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement('a');
+    downloadLink.href = url;
+    downloadLink.download = `fitpulse_meus_dados_lgpd_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+
+    return exportData;
+  } catch (err) {
+    console.error('Erro na exportação de dados LGPD:', err);
+    throw new Error('Falha ao gerar arquivo de exportação de dados.');
+  }
+}
+
+/**
  * Delete all user data from Firestore subcollections.
- * LGPD compliant.
+ * LGPD compliant cascade deletion.
  */
 export async function deleteUserData(uid) {
   if (!uid) throw new Error('User ID necessário');
@@ -184,6 +304,74 @@ export async function reauthenticateUser(user, password) {
 }
 
 /**
+ * Brazilian Phone Mask Utility: (XX) XXXXX-XXXX or (XX) XXXX-XXXX
+ */
+export function formatPhoneBR(value) {
+  if (!value) return '';
+  const digits = String(value).replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+}
+
+/**
+ * Validate email format.
+ */
+export function validateEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+/**
+ * Validate password strength.
+ */
+export function validatePasswordStrength(password) {
+  const feedback = [];
+  let score = 0;
+
+  if (!password) {
+    return { valid: false, score: 0, feedback: ['Digite uma senha'] };
+  }
+
+  if (password.length >= 8) {
+    score++;
+  } else {
+    feedback.push('Mínimo 8 caracteres');
+  }
+
+  if (/[A-Z]/.test(password)) {
+    score++;
+  } else {
+    feedback.push('Pelo menos 1 letra maiúscula');
+  }
+
+  if (/[a-z]/.test(password)) {
+    score++;
+  } else {
+    feedback.push('Pelo menos 1 letra minúscula');
+  }
+
+  if (/[0-9]/.test(password)) {
+    score++;
+  } else {
+    feedback.push('Pelo menos 1 número');
+  }
+
+  if (/[^A-Za-z0-9]/.test(password)) {
+    score++;
+  }
+
+  return {
+    valid: score >= 4,
+    score,
+    feedback,
+  };
+}
+
+/**
  * Translate Firebase & Google Auth error codes to user-friendly PT-BR messages.
  */
 export function getFirebaseAuthErrorMessage(code, customMessage) {
@@ -219,46 +407,4 @@ export function getFirebaseAuthErrorMessage(code, customMessage) {
       ? `Erro no login (${codeStr}). Tente novamente.`
       : 'Ocorreu um erro no login com Google. Tente novamente.')
   );
-}
-
-/**
- * Validate password strength.
- */
-export function validatePasswordStrength(password) {
-  const feedback = [];
-  let score = 0;
-
-  if (password.length >= 8) {
-    score++;
-  } else {
-    feedback.push('Mínimo 8 caracteres');
-  }
-
-  if (/[A-Z]/.test(password)) {
-    score++;
-  } else {
-    feedback.push('Pelo menos 1 letra maiúscula');
-  }
-
-  if (/[a-z]/.test(password)) {
-    score++;
-  } else {
-    feedback.push('Pelo menos 1 letra minúscula');
-  }
-
-  if (/[0-9]/.test(password)) {
-    score++;
-  } else {
-    feedback.push('Pelo menos 1 número');
-  }
-
-  if (/[^A-Za-z0-9]/.test(password)) {
-    score++;
-  }
-
-  return {
-    valid: score >= 4,
-    score,
-    feedback,
-  };
 }

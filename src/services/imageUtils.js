@@ -1,7 +1,7 @@
 /**
  * Image utilities for compressing photos before AI analysis.
  * Mobile cameras produce 5-10MB images that can timeout the Gemini API.
- * This compresses them to ~150-250KB (max 1024x1024, JPEG 85%) via Canvas API.
+ * This compresses them to ~150-250KB (max 1024x1024, JPEG 80%) via Canvas API.
  */
 
 /**
@@ -23,10 +23,10 @@ export function readFileAsDataUrl(file) {
  * Compress an image (File, Blob, Data URI, or raw base64) to a target max dimension and quality.
  * @param {File|Blob|string} imageSource - File, Blob, Data URL or raw base64
  * @param {number} maxWidth - Max width in pixels (default 1024)
- * @param {number} quality - JPEG quality 0-1 (default 0.85)
+ * @param {number} quality - JPEG quality 0-1 (default 0.80 / 80%)
  * @returns {Promise<{base64: string, dataUrl: string, mimeType: string, width: number, height: number, originalSizeKB: number, compressedSizeKB: number}>}
  */
-export async function compressImage(imageSource, maxWidth = 1024, quality = 0.85) {
+export async function compressImage(imageSource, maxWidth = 1024, quality = 0.80) {
   let dataUrl = '';
 
   if (typeof imageSource === 'object' && imageSource instanceof Blob) {
