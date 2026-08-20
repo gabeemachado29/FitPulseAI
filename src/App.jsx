@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth } from './config/firebase';
 import { useAuthStore } from './store/authStore';
-import { useProfile } from './hooks/useProfile';
+import { useProfileStore } from './store/profileStore';
 import { applyTheme } from './components/profile/SettingsSection';
 
 /* ── Pages ── */
@@ -29,7 +29,7 @@ import ToastContainer from './components/ui/ToastContainer';
 function ProtectedRoute({ children }) {
   const user = useAuthStore((state) => state.user);
   const loading = useAuthStore((state) => state.loading);
-  const { profile, loading: profileLoading } = useProfile();
+  const profile = useProfileStore((state) => state.profile);
   const location = useLocation();
 
   if (loading) {
@@ -40,8 +40,8 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  // If user hasn't completed onboarding and is not already on /onboarding, redirect
-  if (!profileLoading && profile && profile.has_completed_onboarding === false) {
+  // If user hasn't completed onboarding, redirect to /onboarding
+  if (profile && profile.has_completed_onboarding === false) {
     if (location.pathname !== '/onboarding') {
       return <Navigate to="/onboarding" replace />;
     }
@@ -53,9 +53,9 @@ function ProtectedRoute({ children }) {
 function OnboardingRoute({ children }) {
   const user = useAuthStore((state) => state.user);
   const loading = useAuthStore((state) => state.loading);
-  const { profile, loading: profileLoading } = useProfile();
+  const profile = useProfileStore((state) => state.profile);
 
-  if (loading || profileLoading) {
+  if (loading) {
     return <Loader fullScreen />;
   }
 
@@ -103,12 +103,18 @@ export default function App() {
     const savedTheme = localStorage.getItem('fitpulse_theme') || 'system';
     applyTheme(savedTheme);
 
+    // Fallback safety timeout: never stay stuck on loading screen longer than 3 seconds
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 3000);
+
     // Check if returning from a redirect
     getRedirectResult(auth).catch((err) => {
       console.warn('Redirect auth result info:', err);
     });
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      clearTimeout(safetyTimer);
       if (firebaseUser) {
         setUser({
           uid: firebaseUser.uid,
@@ -122,7 +128,10 @@ export default function App() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, [setUser, setLoading]);
 
   return (
@@ -149,7 +158,7 @@ export default function App() {
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
 
-        {/* Onboarding wizard route for first access */}
+        {/* Onboarding wizard route */}
         <Route
           path="/onboarding"
           element={
