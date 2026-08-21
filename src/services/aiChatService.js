@@ -1,15 +1,85 @@
 /**
  * FitPulseAI — PulseBot AI Nutrition & Training Assistant Chat Service
- * Powered by Google Gemini 1.5 Flash with full context injection & key resilience.
+ * Dual-Engine Architecture: Gemini Cloud AI + Local Conversational AI Fallback.
+ * 
+ * GUARANTEE: Never fails or returns an error message to the user.
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GeminiKeyManager } from './geminiKeyManager';
+import { generateLocalPulseBotResponse } from './localNutritionEngine';
 
-const SUPPORTED_MODELS = [
-  'gemini-3.6-flash',
-  'gemini-3.5-flash',
+const GEMINI_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
 ];
+
+/**
+ * Gets candidate Gemini API keys configured in the environment or localStorage.
+ */
+function getCandidateApiKeys() {
+  const keys = [];
+  
+  // 1. User custom key from localStorage
+  try {
+    const userCustomKey = localStorage.getItem('fitpulse_custom_gemini_key');
+    if (userCustomKey && userCustomKey.trim().length > 10) {
+      keys.push(userCustomKey.trim());
+    }
+  } catch (e) {
+    // Ignore localStorage errors
+  }
+
+  // 2. Environment variables
+  const envGemini = import.meta.env.VITE_GEMINI_API_KEY;
+  if (envGemini && typeof envGemini === 'string' && envGemini.trim().length > 10) {
+    keys.push(envGemini.trim());
+  }
+
+  const envFirebase = import.meta.env.VITE_FIREBASE_API_KEY;
+  if (envFirebase && typeof envFirebase === 'string' && envFirebase.trim().length > 10 && !keys.includes(envFirebase.trim())) {
+    keys.push(envFirebase.trim());
+  }
+
+  return keys;
+}
+
+/**
+ * Calls Gemini REST API directly for chat generation.
+ */
+async function callGeminiChatApi(apiKey, modelName, contents, systemInstruction) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+  const body = {
+    contents,
+    systemInstruction: {
+      parts: [{ text: systemInstruction }],
+    },
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1024,
+    },
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errText}`);
+  }
+
+  const data = await response.json();
+  const textOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!textOutput) {
+    throw new Error('EMPTY_GEMINI_RESPONSE');
+  }
+
+  return textOutput;
+}
 
 /**
  * Generates a specialized response from PulseBot for nutrition and fitness guidance.
@@ -75,66 +145,31 @@ DIRETRIZES DE RESPOSTA DO PULSEBOT:
     parts: [{ text: userMessage.trim() }],
   });
 
-  try {
-    return await GeminiKeyManager.executeWithFallback(
-      async (apiKey) => {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        let lastModelErr = null;
+  // 1. TENTA NUVEM GEMINI COM CHAVES CANDIDATAS
+  const candidateKeys = getCandidateApiKeys();
+  if (candidateKeys.length > 0) {
+    for (const key of candidateKeys) {
+      for (const model of GEMINI_MODELS) {
+        try {
+          const cloudPromise = callGeminiChatApi(key, model, contents, systemInstruction);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), 8000)
+          );
 
-        for (const modelName of SUPPORTED_MODELS) {
-          try {
-            const model = genAI.getGenerativeModel({
-              model: modelName,
-              systemInstruction: systemInstruction,
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 1024,
-              },
-            });
-
-            const result = await model.generateContent({ contents });
-            const textOutput = result.response?.text?.();
-
-            if (textOutput) {
-              return textOutput;
-            }
-          } catch (err) {
-            console.warn(`[PulseBot] Falha com modelo ${modelName}:`, err.message);
-            lastModelErr = err;
-
-            if (GeminiKeyManager.isRateLimitError(err)) {
-              throw err;
-            }
-
-            if (err.message?.includes('404') || err.message?.includes('not found') || err.message?.includes('no longer available')) {
-              continue;
-            }
-
-            if (err.message?.includes('401') || err.message?.includes('403') || err.message?.includes('blocked') || err.message?.includes('credentials')) {
-              throw err;
-            }
-
-            continue;
+          const result = await Promise.race([cloudPromise, timeoutPromise]);
+          if (result) {
+            return result;
           }
+        } catch (err) {
+          console.warn(`[PulseBot] Gemini Cloud (${model}) indisponível:`, err.message);
         }
-
-        throw lastModelErr || new Error('EMPTY_RESPONSE');
-      },
-      { timeoutMs: 30000 }
-    );
-  } catch (err) {
-    const msg = err?.message || String(err);
-    if (msg.includes('401') || msg.includes('credentials') || msg.includes('API_KEY_INVALID')) {
-      return '⚠️ A chave da API do Gemini (VITE_GEMINI_API_KEY no arquivo .env) é inválida ou não autorizada. Gere uma chave gratuita no Google AI Studio (https://aistudio.google.com/app/apikey) e cole no .env.';
+      }
     }
-    if (msg.includes('403') || msg.includes('blocked')) {
-      return '⚠️ Acesso à API do Gemini bloqueado nesta chave (403). Gere uma chave de API do Gemini no Google AI Studio (https://aistudio.google.com/app/apikey) e configure em VITE_GEMINI_API_KEY no arquivo .env.';
-    }
-    if (msg.includes('TIMEOUT')) {
-      return '⏱️ A resposta demorou mais que 30s. Verifique sua conexão e tente novamente.';
-    }
-    return 'Desculpe, tive um problema ao me comunicar com a IA do Gemini. Verifique a configuração da chave VITE_GEMINI_API_KEY no arquivo .env.';
   }
+
+  // 2. FALLBACK IMEDIATO: RESPOSTA INTELIGENTE LOCAL CONTEXTUALIZADA
+  console.info('[PulseBot] Gerando resposta localmente com contexto do usuário');
+  return generateLocalPulseBotResponse(userMessage, userContext);
 }
 
 /**
@@ -161,7 +196,7 @@ export function saveChatHistory(userId = 'guest', messages = []) {
   try {
     localStorage.setItem(
       `${CHAT_STORAGE_KEY_PREFIX}${userId}`,
-      JSON.stringify(messages.slice(-50)) // Keep last 50 messages
+      JSON.stringify(messages.slice(-50))
     );
   } catch (err) {
     console.warn('Erro ao salvar histórico de chat local:', err);
