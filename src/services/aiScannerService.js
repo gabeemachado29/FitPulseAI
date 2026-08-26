@@ -1,8 +1,8 @@
 /**
  * FitPulseAI — Multimodal Food AI Service with Fail-Safe Dual Engine Architecture
  * 
- * Powered by Google Gemini Vision with automatic, instant fallback to the
- * Local TACO/USDA Nutrition Intelligence Engine.
+ * Powered by Google Gemini 2.0 Flash (free unlimited tier) with automatic,
+ * instant fallback to the Local TACO/USDA Nutrition Intelligence Engine.
  * 
  * GUARANTEE: Never fails or blocks the user, whether an external API key is valid or not.
  */
@@ -11,11 +11,21 @@ import { compressImage } from './imageUtils';
 import { parseFoodAnalysisResult, cleanAndParseJson } from './foodAnalysisModels';
 import { analyzeTextWithLocalEngine, analyzePhotoWithLocalEngine } from './localNutritionEngine';
 
-// Gemini REST models (2025+)
+/**
+ * Gemini models ordered by priority.
+ * gemini-2.0-flash — best free model, multimodal, unlimited usage.
+ * gemini-2.0-flash-lite — lighter fallback, also free and unlimited.
+ */
 const GEMINI_MODELS = [
   'gemini-2.0-flash',
-  'gemini-1.5-flash',
+  'gemini-2.0-flash-lite',
 ];
+
+/** Cloud request timeout in milliseconds (25s for image analysis). */
+const CLOUD_TIMEOUT_MS = 25000;
+
+/** Maximum retry attempts for transient errors (429, 503). */
+const MAX_RETRIES = 2;
 
 const SYSTEM_INSTRUCTION = `Você é o motor de visão computacional e inteligência nutricional do FitPulseAI.
 Analise a entrada alimentar (imagem, texto ou ambos) e calcule os macronutrientes com base nas tabelas TACO e USDA.
@@ -55,6 +65,8 @@ Retorne SEMPRE um JSON válido com o formato:
 
 /**
  * Gets candidate Gemini API keys configured in the environment or localStorage.
+ * NOTE: Firebase API keys do NOT work with the Generative Language API — only
+ * dedicated Gemini keys from Google AI Studio are valid.
  */
 function getCandidateApiKeys() {
   const keys = [];
@@ -69,22 +81,24 @@ function getCandidateApiKeys() {
     // Ignore localStorage errors
   }
 
-  // 2. Environment variables
+  // 2. Dedicated Gemini API key from environment
   const envGemini = import.meta.env.VITE_GEMINI_API_KEY;
-  if (envGemini && typeof envGemini === 'string' && envGemini.trim().length > 10) {
+  if (envGemini && typeof envGemini === 'string' && envGemini.trim().length > 10 && !keys.includes(envGemini.trim())) {
     keys.push(envGemini.trim());
-  }
-
-  const envFirebase = import.meta.env.VITE_FIREBASE_API_KEY;
-  if (envFirebase && typeof envFirebase === 'string' && envFirebase.trim().length > 10 && !keys.includes(envFirebase.trim())) {
-    keys.push(envFirebase.trim());
   }
 
   return keys;
 }
 
 /**
- * Calls Gemini REST API directly with structured response format.
+ * Sleeps for the given milliseconds (used for retry backoff).
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Calls Gemini REST API directly with structured response format, with retry on transient errors.
  */
 async function callGeminiRestApi(apiKey, modelName, parts) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
@@ -107,26 +121,53 @@ async function callGeminiRestApi(apiKey, modelName, parts) {
     },
   };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  let lastError = null;
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errText}`);
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) {
+        // Exponential backoff: 1s, 2s
+        await sleep(1000 * attempt);
+        console.info(`[FitPulseAI] Retry attempt ${attempt} for ${modelName}...`);
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      // On transient errors, retry
+      if ((response.status === 429 || response.status === 503) && attempt < MAX_RETRIES) {
+        lastError = new Error(`HTTP ${response.status}: Rate limited or service unavailable`);
+        continue;
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errText}`);
+      }
+
+      const data = await response.json();
+      const textOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!textOutput) {
+        throw new Error('EMPTY_GEMINI_RESPONSE');
+      }
+
+      return cleanAndParseJson(textOutput);
+    } catch (err) {
+      lastError = err;
+      // Only retry on network errors or transient HTTP errors
+      if (attempt < MAX_RETRIES && (err.message.includes('429') || err.message.includes('503') || err.name === 'TypeError')) {
+        continue;
+      }
+      throw err;
+    }
   }
 
-  const data = await response.json();
-  const textOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!textOutput) {
-    throw new Error('EMPTY_GEMINI_RESPONSE');
-  }
-
-  return cleanAndParseJson(textOutput);
+  throw lastError || new Error('GEMINI_MAX_RETRIES_EXCEEDED');
 }
 
 /**
@@ -209,10 +250,10 @@ export class FoodAnalysisService {
       for (const key of candidateKeys) {
         for (const model of GEMINI_MODELS) {
           try {
-            // Executa com timeout de 8 segundos para resposta ultrarrápida
+            // Executa com timeout de 25 segundos para permitir análises completas
             const geminiPromise = callGeminiRestApi(key, model, parts);
             const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), 8000)
+              setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), CLOUD_TIMEOUT_MS)
             );
 
             const parsedJson = await Promise.race([geminiPromise, timeoutPromise]);

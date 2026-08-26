@@ -3,22 +3,37 @@
  * Dual-Engine Architecture: Gemini Cloud AI + Local Conversational AI Fallback.
  * 
  * GUARANTEE: Never fails or returns an error message to the user.
+ * 
+ * Engine: Google Gemini 2.0 Flash (free unlimited tier)
  */
 
 import { generateLocalPulseBotResponse } from './localNutritionEngine';
 
+/**
+ * Gemini models ordered by priority.
+ * gemini-2.0-flash — best free model, multimodal, unlimited usage.
+ * gemini-2.0-flash-lite — lighter fallback, also free and unlimited.
+ */
 const GEMINI_MODELS = [
   'gemini-2.0-flash',
-  'gemini-1.5-flash',
+  'gemini-2.0-flash-lite',
 ];
+
+/** Cloud request timeout in milliseconds (25s for complex queries). */
+const CLOUD_TIMEOUT_MS = 25000;
+
+/** Maximum retry attempts for transient errors (429, 503). */
+const MAX_RETRIES = 2;
 
 /**
  * Gets candidate Gemini API keys configured in the environment or localStorage.
+ * NOTE: Firebase API keys do NOT work with the Generative Language API — only
+ * dedicated Gemini keys from Google AI Studio are valid.
  */
 function getCandidateApiKeys() {
   const keys = [];
   
-  // 1. User custom key from localStorage
+  // 1. User custom key from localStorage (can be set in the app settings)
   try {
     const userCustomKey = localStorage.getItem('fitpulse_custom_gemini_key');
     if (userCustomKey && userCustomKey.trim().length > 10) {
@@ -28,22 +43,24 @@ function getCandidateApiKeys() {
     // Ignore localStorage errors
   }
 
-  // 2. Environment variables
+  // 2. Dedicated Gemini API key from environment
   const envGemini = import.meta.env.VITE_GEMINI_API_KEY;
-  if (envGemini && typeof envGemini === 'string' && envGemini.trim().length > 10) {
+  if (envGemini && typeof envGemini === 'string' && envGemini.trim().length > 10 && !keys.includes(envGemini.trim())) {
     keys.push(envGemini.trim());
-  }
-
-  const envFirebase = import.meta.env.VITE_FIREBASE_API_KEY;
-  if (envFirebase && typeof envFirebase === 'string' && envFirebase.trim().length > 10 && !keys.includes(envFirebase.trim())) {
-    keys.push(envFirebase.trim());
   }
 
   return keys;
 }
 
 /**
- * Calls Gemini REST API directly for chat generation.
+ * Sleeps for the given milliseconds (used for retry backoff).
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Calls Gemini REST API directly for chat generation, with retry on transient errors.
  */
 async function callGeminiChatApi(apiKey, modelName, contents, systemInstruction) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
@@ -55,30 +72,57 @@ async function callGeminiChatApi(apiKey, modelName, contents, systemInstruction)
     },
     generationConfig: {
       temperature: 0.7,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 2048,
     },
   };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  let lastError = null;
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errText}`);
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) {
+        // Exponential backoff: 1s, 2s
+        await sleep(1000 * attempt);
+        console.info(`[PulseBot] Retry attempt ${attempt} for ${modelName}...`);
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      // On transient errors, retry
+      if ((response.status === 429 || response.status === 503) && attempt < MAX_RETRIES) {
+        lastError = new Error(`HTTP ${response.status}: Rate limited or service unavailable`);
+        continue;
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errText}`);
+      }
+
+      const data = await response.json();
+      const textOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!textOutput) {
+        throw new Error('EMPTY_GEMINI_RESPONSE');
+      }
+
+      return textOutput;
+    } catch (err) {
+      lastError = err;
+      // Only retry on network errors or transient HTTP errors
+      if (attempt < MAX_RETRIES && (err.message.includes('429') || err.message.includes('503') || err.name === 'TypeError')) {
+        continue;
+      }
+      throw err;
+    }
   }
 
-  const data = await response.json();
-  const textOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!textOutput) {
-    throw new Error('EMPTY_GEMINI_RESPONSE');
-  }
-
-  return textOutput;
+  throw lastError || new Error('GEMINI_MAX_RETRIES_EXCEEDED');
 }
 
 /**
@@ -153,7 +197,7 @@ DIRETRIZES DE RESPOSTA DO PULSEBOT:
         try {
           const cloudPromise = callGeminiChatApi(key, model, contents, systemInstruction);
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), 8000)
+            setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), CLOUD_TIMEOUT_MS)
           );
 
           const result = await Promise.race([cloudPromise, timeoutPromise]);

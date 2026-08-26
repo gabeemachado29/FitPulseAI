@@ -132,7 +132,7 @@ export default function ChatPage() {
                 PulseBot IA
               </h1>
               <span className={styles.tagFlash}>
-                <Zap size={11} /> 1.5 Flash
+                <Zap size={11} /> 2.0 Flash
               </span>
             </div>
             <p className="page-header__subtitle">Nutrição, macros e treinos em tempo real</p>
