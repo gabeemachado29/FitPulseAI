@@ -1,6 +1,6 @@
-import 'package:test/test.dart';
-import 'package:fitpulse_ai/domain/value_objects/result.dart';
 import 'package:fitpulse_ai/domain/value_objects/macronutrientes.dart';
+import 'package:fitpulse_ai/domain/value_objects/result.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('Value Object Macronutrientes - Criação e Operações', () {

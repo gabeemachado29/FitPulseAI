@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:fitpulse_ai/domain/entities/atleta.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('Motor Metabólico (Mifflin-St Jeor) - TMB e GET', () {
