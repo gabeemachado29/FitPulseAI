@@ -8,9 +8,9 @@ Baseado no documento oficial: *"FitPulse AI - Fundação Técnica, Governança e
 ---
 
 ## 1. Status do Ciclo TDD
-- **Fase Atual:** 🟢 **GREEN** (Fatias 1, 2 e 3 100% concluídas e testadas!)
-- **Fatia em Execução:** **Fatia 3: Integrações Externas, Telemetria & Strava Adapter** (CONCLUÍDA ✅)
-- **Testes Concluídos:** **17/17 testes passando com 100% de sucesso**:
+- **Fase Atual:** 🟢 **GREEN** (Fatias 1, 2, 3 e 4 100% concluídas e testadas!)
+- **Fatia em Execução:** **Fatia 4: Shell Flutter & Camada de Apresentação** (CONCLUÍDA ✅)
+- **Suíte de Testes:** **20/20 testes passando com 100% de sucesso**:
   - T1, T2, T3: `test/domain/services/metabolismo_test.dart` (TMB e GET via Mifflin-St Jeor)
   - T4, T5, T6: `test/domain/value_objects/macronutrientes_test.dart` (Macronutrientes, Atwater e Result monad)
   - T7: `test/domain/entities/refeicao_validada_test.dart` (RefeicaoValidada e totalCalorico)
@@ -19,8 +19,10 @@ Baseado no documento oficial: *"FitPulse AI - Fundação Técnica, Governança e
   - T10, T10b: `test/domain/services/fluxo_monadic_test.dart` (Fluxo Monadic fold encadeado)
   - Repositório In-Memory: `test/infrastructure/repositories/atleta_repositorio_in_memory_test.dart`
   - StravaPort & AtividadeStrava: `test/domain/ports/strava_port_test.dart`
-  - SaldoDisponivelService: `test/domain/services/saldo_disponivel_service_test.dart`
-- **Análise Estática:** `dart analyze`: **0 issues** com lints estritos ativados (`strict-casts`, `strict-inference`, `strict-raw-types`).
+  - SaldoDisponivelService: `test/domain/services/saldo_disponivel_service_test.dart` (Equação 5.3)
+  - DashboardBalancoCalorico Widget: `test/presentation/dashboard_balanco_calorico_test.dart`
+  - FitPulseApp Shell Integration: `test/presentation/fitpulse_app_test.dart` (Cenários Success e Error)
+- **Análise Estática:** `flutter analyze`: **0 issues** com lints estritos (`strict-casts`, `strict-inference`, `strict-raw-types`).
 
 ---
 
@@ -54,41 +56,48 @@ Baseado no documento oficial: *"FitPulse AI - Fundação Técnica, Governança e
 ## 4. Estrutura de Diretórios e Arquivos Atuais
 ```text
 lib/
-├── domain/                  # Functional Core (Dart puro)
+├── main.dart                                # Entrypoint da aplicação Flutter
+├── domain/                                  # Functional Core (Dart puro)
 │   ├── entities/            
-│   │   ├── atleta.dart             # Entidade Atleta, SexoBiologico e NivelAtividade
-│   │   └── refeicao_validada.dart  # Entidade RefeicaoValidada
+│   │   ├── atleta.dart                      # Entidade Atleta, SexoBiologico e NivelAtividade
+│   │   └── refeicao_validada.dart           # Entidade RefeicaoValidada
 │   ├── value_objects/       
-│   │   ├── result.dart             # Mônada Result<S, F> (sealed class: Success, Failure)
-│   │   └── macronutrientes.dart    # Value Object Macronutrientes + DomainError
+│   │   ├── result.dart                      # Mônada Result<S, F> (sealed class: Success, Failure)
+│   │   └── macronutrientes.dart             # Value Object Macronutrientes + DomainError
 │   ├── services/            
-│   │   ├── balanco_calorico_service.dart # Serviço de balanço energético básico
-│   │   └── saldo_disponivel_service.dart # Serviço canônico de saldo com treino (Eq 5.3)
+│   │   ├── balanco_calorico_service.dart  # Serviço de balanço energético básico
+│   │   └── saldo_disponivel_service.dart  # Serviço canônico de saldo com treino (Eq 5.3)
 │   └── ports/               
-│       ├── atleta_repositorio.dart # Porta abstrata do repositório
-│       └── strava_port.dart        # Porta abstrata Strava + AtividadeStrava
-├── infrastructure/          # Adapters (Strava, IndexedDB, Repositórios In-Memory)
+│       ├── atleta_repositorio.dart          # Porta abstrata do repositório
+│       └── strava_port.dart                 # Porta abstrata Strava + AtividadeStrava
+├── infrastructure/                          # Adapters (Strava, IndexedDB, Repositórios In-Memory)
 │   └── repositories/
 │       └── atleta_repositorio_in_memory.dart # Adaptador In-Memory do AtletaRepositorio
-└── presentation/            # UI Shell (Flutter)
+└── presentation/                            # UI Shell (Flutter)
+    ├── fitpulse_app.dart                    # App Shell principal integrado com repositório
+    └── widgets/
+        └── dashboard_balanco_calorico.dart  # Widget Dashboard de Balanço Calórico
 
 test/
 ├── domain/
 │   ├── entities/
-│   │   └── refeicao_validada_test.dart            # Teste T7 (GREEN ✅)
+│   │   └── refeicao_validada_test.dart             # Teste T7 (GREEN ✅)
 │   ├── ports/
-│   │   ├── atleta_repositorio_test.dart           # Teste T8 (GREEN ✅)
-│   │   └── strava_port_test.dart                  # AtividadeStrava & StravaPort (GREEN ✅)
+│   │   ├── atleta_repositorio_test.dart            # Teste T8 (GREEN ✅)
+│   │   └── strava_port_test.dart                   # AtividadeStrava & StravaPort (GREEN ✅)
 │   ├── services/
-│   │   ├── metabolismo_test.dart                  # Testes T1, T2 e T3 (GREEN ✅)
-│   │   ├── balanco_calorico_service_test.dart     # Teste T9 (GREEN ✅)
-│   │   ├── fluxo_monadic_test.dart                # Testes T10 e T10b (GREEN ✅)
-│   │   └── saldo_disponivel_service_test.dart     # Saldo Disponível com Treino (GREEN ✅)
+│   │   ├── metabolismo_test.dart                   # Testes T1, T2 e T3 (GREEN ✅)
+│   │   ├── balanco_calorico_service_test.dart      # Teste T9 (GREEN ✅)
+│   │   ├── fluxo_monadic_test.dart                 # Testes T10 e T10b (GREEN ✅)
+│   │   └── saldo_disponivel_service_test.dart      # Saldo Disponível com Treino (GREEN ✅)
 │   └── value_objects/
-│       └── macronutrientes_test.dart              # Testes T4, T5 e T6 (GREEN ✅)
-└── infrastructure/
-    └── repositories/
-        └── atleta_repositorio_in_memory_test.dart # Teste do Adaptador In-Memory (GREEN ✅)
+│       └── macronutrientes_test.dart               # Testes T4, T5 e T6 (GREEN ✅)
+├── infrastructure/
+│   └── repositories/
+│       └── atleta_repositorio_in_memory_test.dart  # Teste do Adaptador In-Memory (GREEN ✅)
+└── presentation/
+    ├── dashboard_balanco_calorico_test.dart        # Teste de Widget do Dashboard (GREEN ✅)
+    └── fitpulse_app_test.dart                      # Teste de Integração UI do App Shell (GREEN ✅)
 ```
 
 ---
@@ -120,22 +129,22 @@ test/
 - [x] Validação da transição para a fase GREEN: 17/17 testes passando com 100% de sucesso.
 - [x] Análise estática `dart analyze`: 0 issues.
 
-### [Fatia 4: Shell Flutter & Edge AI] (PRÓXIMA ETAPA 🚀)
-- [ ] Configuração do entrypoint da aplicação e Shell Flutter em `lib/presentation/`.
-- [ ] Criação dos componentes de UI desacoplados (Dashboard de Balanço Energético, Visualizador de Macronutrientes).
-- [ ] Integração reativa dos adaptadores com a camada de apresentação.
-- [ ] LLM Parser Local & Sync Off-line Bidirecional.
+### [Fatia 4: Shell Flutter & Camada de Apresentação] (CONCLUÍDA ✅)
+- [x] Configuração de dependências do Flutter SDK em `pubspec.yaml` com `flutter_test`.
+- [x] Criação dos testes de widget e de integração da UI em `test/presentation/` (Fase RED).
+- [x] Implementação do widget desacoplado `DashboardBalancoCalorico` em `lib/presentation/widgets/`.
+- [x] Implementação do App Shell `FitPulseApp` em `lib/presentation/fitpulse_app.dart` conectado ao repositório.
+- [x] Implementação do entrypoint oficial `lib/main.dart`.
+- [x] Validação completa de toda a aplicação: **20/20 testes passando com 100% de sucesso**.
+- [x] Análise estática `flutter analyze`: **0 issues**.
 
 ---
 
-## 6. Próximo Passo Pronto para Copiar e Colar (Next Prompt)
+## 6. Próximo Passo Sugerido
 
 ```markdown
-Inicie a Fatia 4 do FitPulse AI (Shell Flutter & Camada de Apresentação):
-1. Configure o suporte a Flutter em `pubspec.yaml` (dependência do sdk: flutter).
-2. Crie os testes de widget/apresentação na pasta `test/presentation/`:
-   - Teste de renderização do Dashboard de Balanço Calórico exibindo TMB, GET e Saldo Disponível calculados deterministamente pelo Functional Core.
-3. Implemente a UI Shell em `lib/presentation/` conectada aos serviços do Core e ao Repositório In-Memory.
-4. Execute todos os testes e comprove 0 issues no `dart analyze`.
-5. Atualize o arquivo `GEMINI.md`.
+Refine a camada de persistência e integrações avançadas do FitPulse AI:
+1. Implemente o adaptador de persistência local SQLite/IndexedDB para produção.
+2. Adicione suporte a registro dinâmico de novas refeições e treinos via UI.
+3. Configure pipeline de CI/CD para validação automática dos testes e linter.
 ```

@@ -17,7 +17,8 @@ void main() {
 
         expect(resultado, isA<Success<Macronutrientes, DomainError>>());
 
-        final macros = (resultado as Success<Macronutrientes, DomainError>).valor;
+        final macros =
+            (resultado as Success<Macronutrientes, DomainError>).valor;
         expect(macros.proteinasG, equals(100.0));
         expect(macros.carboidratosG, equals(200.0));
         expect(macros.gordurasG, equals(50.0));
