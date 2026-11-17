@@ -8,13 +8,19 @@ Baseado no documento oficial: *"FitPulse AI - Fundação Técnica, Governança e
 ---
 
 ## 1. Status do Ciclo TDD
-- **Fase Atual:** 🔴 **RED**
-- **Fatia em Execução:** **Fatia 3: Integrações Externas, Telemetria & Strava Adapter**
-- **Testes Concluídos Anteriores:** 13/13 testes passando (Fatias 1 e 2 100% GREEN e comitadas).
-- **Testes da Fase RED da Fatia 3:**
-  - `test/domain/ports/strava_port_test.dart` (Entidade `AtividadeStrava`, porta `StravaPort`, cenários Success e Failure)
-  - `test/domain/services/saldo_disponivel_service_test.dart` (Equação 5.3: $E_{\text{disponível}} = \text{GET} + E_{\text{treino}} - \sum E_{\text{refeições}}$)
-- **Resultado do Runner:** Falhas esperadas por ausência de `AtividadeStrava`, `StravaPort` e `SaldoDisponivelService`.
+- **Fase Atual:** 🟢 **GREEN** (Fatias 1, 2 e 3 100% concluídas e testadas!)
+- **Fatia em Execução:** **Fatia 3: Integrações Externas, Telemetria & Strava Adapter** (CONCLUÍDA ✅)
+- **Testes Concluídos:** **17/17 testes passando com 100% de sucesso**:
+  - T1, T2, T3: `test/domain/services/metabolismo_test.dart` (TMB e GET via Mifflin-St Jeor)
+  - T4, T5, T6: `test/domain/value_objects/macronutrientes_test.dart` (Macronutrientes, Atwater e Result monad)
+  - T7: `test/domain/entities/refeicao_validada_test.dart` (RefeicaoValidada e totalCalorico)
+  - T8: `test/domain/ports/atleta_repositorio_test.dart` (Porta AtletaRepositorio)
+  - T9: `test/domain/services/balanco_calorico_service_test.dart` (BalancoCaloricoService)
+  - T10, T10b: `test/domain/services/fluxo_monadic_test.dart` (Fluxo Monadic fold encadeado)
+  - Repositório In-Memory: `test/infrastructure/repositories/atleta_repositorio_in_memory_test.dart`
+  - StravaPort & AtividadeStrava: `test/domain/ports/strava_port_test.dart`
+  - SaldoDisponivelService: `test/domain/services/saldo_disponivel_service_test.dart`
+- **Análise Estática:** `dart analyze`: **0 issues** com lints estritos ativados (`strict-casts`, `strict-inference`, `strict-raw-types`).
 
 ---
 
@@ -56,9 +62,11 @@ lib/
 │   │   ├── result.dart             # Mônada Result<S, F> (sealed class: Success, Failure)
 │   │   └── macronutrientes.dart    # Value Object Macronutrientes + DomainError
 │   ├── services/            
-│   │   └── balanco_calorico_service.dart # Serviço de balanço energético básico
+│   │   ├── balanco_calorico_service.dart # Serviço de balanço energético básico
+│   │   └── saldo_disponivel_service.dart # Serviço canônico de saldo com treino (Eq 5.3)
 │   └── ports/               
-│       └── atleta_repositorio.dart # Porta abstrata do repositório
+│       ├── atleta_repositorio.dart # Porta abstrata do repositório
+│       └── strava_port.dart        # Porta abstrata Strava + AtividadeStrava
 ├── infrastructure/          # Adapters (Strava, IndexedDB, Repositórios In-Memory)
 │   └── repositories/
 │       └── atleta_repositorio_in_memory.dart # Adaptador In-Memory do AtletaRepositorio
@@ -70,12 +78,12 @@ test/
 │   │   └── refeicao_validada_test.dart            # Teste T7 (GREEN ✅)
 │   ├── ports/
 │   │   ├── atleta_repositorio_test.dart           # Teste T8 (GREEN ✅)
-│   │   └── strava_port_test.dart                  # AtividadeStrava & StravaPort (RED 🔴)
+│   │   └── strava_port_test.dart                  # AtividadeStrava & StravaPort (GREEN ✅)
 │   ├── services/
 │   │   ├── metabolismo_test.dart                  # Testes T1, T2 e T3 (GREEN ✅)
 │   │   ├── balanco_calorico_service_test.dart     # Teste T9 (GREEN ✅)
 │   │   ├── fluxo_monadic_test.dart                # Testes T10 e T10b (GREEN ✅)
-│   │   └── saldo_disponivel_service_test.dart     # Saldo Disponível com Treino (RED 🔴)
+│   │   └── saldo_disponivel_service_test.dart     # Saldo Disponível com Treino (GREEN ✅)
 │   └── value_objects/
 │       └── macronutrientes_test.dart              # Testes T4, T5 e T6 (GREEN ✅)
 └── infrastructure/
@@ -104,17 +112,18 @@ test/
 - [x] Implementação e testes do adaptador `AtletaRepositorioInMemory`.
 - [x] Validação completa: 13/13 testes passando, 0 issues no `dart analyze`.
 
-### [Fatia 3: Integrações Externas, Telemetria & Strava Adapter]
-- [x] Criação dos testes para a entidade `AtividadeStrava` e porta `StravaPort` (`test/domain/ports/strava_port_test.dart` - Fase RED).
-- [x] Criação dos testes para o cálculo de Saldo Calórico Disponível com treino ($E_{\text{disponível}} = \text{GET} + E_{\text{treino}} - \sum E_{\text{refeições}}$) (`test/domain/services/saldo_disponivel_service_test.dart` - Fase RED).
-- [x] Execução dos testes comprovando a fase RED da Fatia 3.
-- [ ] Implementação da entidade imutável `AtividadeStrava` e interface `StravaPort` em `lib/domain/ports/strava_port.dart`.
-- [ ] Implementação de `SaldoDisponivelService` no domínio (`lib/domain/services/saldo_disponivel_service.dart`).
-- [ ] Validação da transição para a fase GREEN (todos os testes passando).
-- [ ] Implementação de Adapter Mock/In-Memory do Strava para testes de infraestrutura.
+### [Fatia 3: Integrações Externas, Telemetria & Strava Adapter] (CONCLUÍDA ✅)
+- [x] Criação dos testes para a entidade `AtividadeStrava` e porta `StravaPort` (`test/domain/ports/strava_port_test.dart`).
+- [x] Criação dos testes para o cálculo de Saldo Calórico Disponível com treino ($E_{\text{disponível}} = \text{GET} + E_{\text{treino}} - \sum E_{\text{refeições}}$) (`test/domain/services/saldo_disponivel_service_test.dart`).
+- [x] Implementação da entidade imutável `AtividadeStrava` e interface `StravaPort` em `lib/domain/ports/strava_port.dart`.
+- [x] Implementação de `SaldoDisponivelService` no domínio (`lib/domain/services/saldo_disponivel_service.dart`).
+- [x] Validação da transição para a fase GREEN: 17/17 testes passando com 100% de sucesso.
+- [x] Análise estática `dart analyze`: 0 issues.
 
-### [Fatia 4: Shell Flutter & Edge AI]
-- [ ] Shell Flutter UI Web/Mobile.
+### [Fatia 4: Shell Flutter & Edge AI] (PRÓXIMA ETAPA 🚀)
+- [ ] Configuração do entrypoint da aplicação e Shell Flutter em `lib/presentation/`.
+- [ ] Criação dos componentes de UI desacoplados (Dashboard de Balanço Energético, Visualizador de Macronutrientes).
+- [ ] Integração reativa dos adaptadores com a camada de apresentação.
 - [ ] LLM Parser Local & Sync Off-line Bidirecional.
 
 ---
@@ -122,13 +131,11 @@ test/
 ## 6. Próximo Passo Pronto para Copiar e Colar (Next Prompt)
 
 ```markdown
-Transicione a Fatia 3 do FitPulse AI da fase RED para a fase GREEN:
-1. Crie `lib/domain/ports/strava_port.dart` contendo:
-   - A classe imutável `AtividadeStrava` (id, distanciaMetros, duracaoSegundos, gastoCaloricoKcal) com construtor const e copyWith.
-   - A interface abstrata `abstract interface class StravaPort` com o método assíncrono `Future<Result<List<AtividadeStrava>, String>> buscarUltimasAtividades({required String atletaId, required int limite})`.
-2. Crie `lib/domain/services/saldo_disponivel_service.dart` contendo:
-   - O serviço puro determinístico `SaldoDisponivelService` com o método `calcular({required double gastoEnergeticoTotal, required double gastoTreinoKcal, required double totalRefeicoesKcal})` aplicando a equação canônica: GET + gastoTreino - totalRefeicoes.
-3. Execute todos os testes unitários (`dart test`) comprovando 100% de sucesso.
-4. Execute `dart analyze lib/ test/` garantindo 0 warnings/erros.
-5. Faça o commit e atualize o arquivo `GEMINI.md`.
+Inicie a Fatia 4 do FitPulse AI (Shell Flutter & Camada de Apresentação):
+1. Configure o suporte a Flutter em `pubspec.yaml` (dependência do sdk: flutter).
+2. Crie os testes de widget/apresentação na pasta `test/presentation/`:
+   - Teste de renderização do Dashboard de Balanço Calórico exibindo TMB, GET e Saldo Disponível calculados deterministamente pelo Functional Core.
+3. Implemente a UI Shell em `lib/presentation/` conectada aos serviços do Core e ao Repositório In-Memory.
+4. Execute todos os testes e comprove 0 issues no `dart analyze`.
+5. Atualize o arquivo `GEMINI.md`.
 ```
