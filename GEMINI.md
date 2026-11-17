@@ -8,12 +8,14 @@ Baseado no documento oficial: *"FitPulse AI - Fundação Técnica, Governança e
 ---
 
 ## 1. Status do Ciclo TDD
-- **Fase Atual:** 🟢 **GREEN** (Transitando para 🔵 **REFACTOR**)
-- **Fatia em Execução:** **Fatia 1: Core Puramente Funcional (Motor Metabólico TMB/GET + Macronutrientes)**
-- **Testes Canônicos Concluídos:** T1 a T6 (6/6 passando, 0 erros no `dart analyze`).
-  - T1, T2, T3: `test/domain/services/metabolismo_test.dart` (TMB e GET)
-  - T4, T5, T6: `test/domain/value_objects/macronutrientes_test.dart` (Macronutrientes e Result)
-- **Próximo Passo:** Refactor da Fatia 1 (lints estritos, `analysis_options.yaml`) e então iniciar Fatia 2.
+- **Fase Atual:** 🔴 **RED**
+- **Fatia em Execução:** **Fatia 2: Mapeamento de Portas, Entidades Secundárias & Repositório In-Memory**
+- **Testes da Fatia Concluída (Fatia 1):** T1 a T6 (6/6 passando, 0 erros com lints estritos).
+- **Testes em Fase RED (Fatia 2):** T7 a T10 (4/4 falhando por ausência de código de produção):
+  - T7: `test/domain/entities/refeicao_validada_test.dart` (RefeicaoValidada e totalCalorico)
+  - T8: `test/domain/ports/atleta_repositorio_test.dart` (Interface AtletaRepositorio)
+  - T9: `test/domain/services/balanco_calorico_service_test.dart` (BalancoCaloricoService)
+  - T10: `test/domain/services/fluxo_monadic_test.dart` (Fluxo Monadic fold e encadeamento)
 
 ---
 
@@ -34,10 +36,11 @@ Baseado no documento oficial: *"FitPulse AI - Fundação Técnica, Governança e
 - **ADR-06 (Dart Puríssimo no Core):** Zero dependências externas no pacote `domain` para execução instantânea em qualquer runtime.
 - **ADR-07 (Formulação Mifflin-St Jeor):** Padronização matemática canônica do cálculo de TMB masculina e feminina.
 - **ADR-08 (Fatores de Atwater):** Calorias de macronutrientes calculadas com Proteínas: 4 kcal/g, Carboidratos: 4 kcal/g, Gorduras: 9 kcal/g.
+- **ADR-09 (Comunicação Assíncrona e Monádica via Ports):** Portas como contratos abstratos do domínio retornando `Result`.
 - **ADR-12 (Tipagem Enumerada de Atividade):** Fatores de atividade física acoplados aos enums (`sedentario: 1.2`, `levementeAtivo: 1.375`, `moderadamenteAtivo: 1.55`, `muitoAtivo: 1.725`, `extremamenteAtivo: 1.9`).
 - **ADR-13 (Armazenamento de Macros com Decimais):** Representação interna de massa em `double` de precisão.
 - **ADR-14 (DomainError Tipado):** Erros de domínio representados por `enum DomainError` para exaustividade no `switch`.
-- **ADR-16 (Testes Unitários Sem Mocks no Core):** Testes diretos sobre entidades puras e funções determinísticas.
+- **ADR-16 (Testes Unitários Sem Mocks no Core):** Testes diretos com implementações in-memory puras no arquivo de teste.
 
 ---
 
@@ -57,10 +60,16 @@ lib/
 
 test/
 └── domain/
+    ├── entities/
+    │   └── refeicao_validada_test.dart        # Teste T7 (RED 🔴)
+    ├── ports/
+    │   └── atleta_repositorio_test.dart       # Teste T8 (RED 🔴)
     ├── services/
-    │   └── metabolismo_test.dart       # Testes T1, T2 e T3 (GREEN ✅)
+    │   ├── metabolismo_test.dart              # Testes T1, T2 e T3 (GREEN ✅)
+    │   ├── balanco_calorico_service_test.dart # Teste T9 (RED 🔴)
+    │   └── fluxo_monadic_test.dart            # Teste T10 (RED 🔴)
     └── value_objects/
-        └── macronutrientes_test.dart   # Testes T4, T5 e T6 (GREEN ✅)
+        └── macronutrientes_test.dart          # Testes T4, T5 e T6 (GREEN ✅)
 ```
 
 ---
@@ -81,15 +90,19 @@ test/
 - [x] Implementação da estrutura monádica `Result<S, F>` (`lib/domain/value_objects/result.dart`).
 - [x] Implementação do Value Object `Macronutrientes` (`lib/domain/value_objects/macronutrientes.dart`) com factory `criar`, `caloriasTotais` e `somar()`.
 - [x] Execução da fase **GREEN** para T4, T5 e T6 (3/3 testes passando com sucesso).
-- [x] Suíte completa: 6/6 testes passando. Análise estática: 0 issues.
-- [ ] Refactor e aplicação de lints estritos (`analysis_options.yaml`).
+- [x] Refactor da Fatia 1 com `analysis_options.yaml` (strict-casts, strict-inference, strict-raw-types) e ordenação de imports (6/6 testes passando, 0 issues).
+- [x] Commit das fases Green e Refactor da Fatia 1.
 
 ### [Fatia 2: Mapeamento de Portas & Repositório In-Memory]
-- [ ] Implementação da entidade `RefeicaoValidada` (T7).
-- [ ] Definição da porta `StravaPort` e teste T8.
-- [ ] Implementação do Algoritmo Calórico de balanço com treinos (T9).
-- [ ] Teste canônico do fluxo monadic fold (T10).
-- [ ] Implementação dos Repositórios In-Memory.
+- [x] Escrita da suíte de testes canônicos T7 a T10 em arquivos separados.
+- [x] Execução e validação da fase **RED** da Fatia 2 (4 arquivos de teste falhando por ausência de código de produção).
+- [x] Commit da fase RED da Fatia 2.
+- [ ] Implementação da entidade imutável `RefeicaoValidada` (`lib/domain/entities/refeicao_validada.dart`).
+- [ ] Implementação da interface abstrata de porta `AtletaRepositorio` (`lib/domain/ports/atleta_repositorio.dart`).
+- [ ] Implementação do serviço puro `BalancoCaloricoService` (`lib/domain/services/balanco_calorico_service.dart`).
+- [ ] Execução dos testes e validação da transição para a fase **GREEN** (T7 a T10 passando, suíte completa 10/10).
+- [ ] Validação estática com `dart analyze` (0 issues).
+- [ ] Implementação de repositório In-Memory na camada de infraestrutura (`lib/infrastructure/repositories/atleta_repositorio_in_memory.dart`).
 
 ### [Fatia 3: Adaptadores de Persistência Local & Strava]
 - [ ] Adapter IndexedDB / SQLite.
@@ -104,13 +117,15 @@ test/
 ## 6. Próximo Passo Pronto para Copiar e Colar (Next Prompt)
 
 ```markdown
-Finalize a Fatia 1 do FitPulse AI com a fase REFACTOR e inicie a Fatia 2:
-1. Crie `analysis_options.yaml` com lints estritos (strict-casts, strict-inference, strict-raw-types) e confirme `dart analyze` limpo.
-2. Inicie a Fatia 2 criando a suíte de testes canônicos T7 a T10 em arquivos separados:
-   - T7: Entidade `RefeicaoValidada` com lista de Macronutrientes -> totalCalorico correto.
-   - T8: Porta `AtletaRepositorio` (interface abstrata) com `salvar` e `buscarPorId` retornando Result.
-   - T9: Serviço `BalancoCaloricoService` calcula deficit/superávit calórico = GET - totalIngerido.
-   - T10: Fluxo monadic completo com `fold` sobre o Result de buscar atleta e calcular balanço.
-3. Execute os testes para comprovar a fase RED da Fatia 2.
-4. Atualize o arquivo `GEMINI.md`.
+Transicione a Fatia 2 do FitPulse AI da fase RED para a fase GREEN:
+1. Crie `lib/domain/entities/refeicao_validada.dart` com:
+   - Classe imutável `RefeicaoValidada` (id, descricao, itens: List<Macronutrientes>)
+   - Getter `double get totalCalorico` somando as caloriasTotais de todos os itens.
+2. Crie `lib/domain/ports/atleta_repositorio.dart` com:
+   - `abstract interface class AtletaRepositorio` definindo `salvar(Atleta atleta)` e `buscarPorId(String id)` retornando `Result`.
+3. Crie `lib/domain/services/balanco_calorico_service.dart` com:
+   - `BalancoCaloricoService.calcular({required double gastoEnergeticoTotal, required double totalIngerido})`.
+4. Execute todos os testes unitários (T1 a T10) comprovando que todos os 10 testes passam com sucesso.
+5. Execute `dart analyze` garantindo 0 warnings/erros.
+6. Faça o commit e atualize o arquivo `GEMINI.md`.
 ```
